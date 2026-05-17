@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <cmath>
 #include <QDebug>
+#include <QElapsedTimer>
 
 void Osc::running() {
     while (running_osc) {

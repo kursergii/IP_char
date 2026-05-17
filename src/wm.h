@@ -51,7 +51,7 @@ public slots:
     void onMeasurementStep();  // called by measureTimer every 1 s
 
     // Data receivers (called via queued connections from worker threads)
-    void read_values(const double &current_V);
+    void read_values(double current_V);
     void read_power(double watts);
 
     void laser_ON();

@@ -33,12 +33,7 @@ If the signal amplitude sits exactly at the 5 000 or 25 000 ADU ranging threshol
 
 ## 🟢 Open — nice to have
 
-**7. No git repository**
-No version history. Run:
-```bash
-cd /home/sk/Work/software/ip_measur/IP_char
-git init && git add . && git commit -m "Initial commit"
-```
+**~~7. No git repository~~** ✅ Fixed — initial commit `c7ed75f` on branch `master`.
 
 **8. Raspberry Pi build not tested**
 Native build on RPi OS Bookworm: install `qt6-base-dev`, `libqt6serialport6-dev`, and the PicoTech ARM package, then build as normal.

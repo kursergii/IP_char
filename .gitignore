@@ -1,6 +1,8 @@
 # Build output
 build/
 bin/WM
+src/out/
+install/
 
 # Qt Creator user settings (machine-specific)
 *.pro.user

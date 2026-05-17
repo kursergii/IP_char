@@ -8,7 +8,7 @@ A Qt6 desktop application for measuring and plotting laser diode **current vs. o
 
 | Device | Connection | Purpose |
 |--------|-----------|---------|
-| LaserPulser4_1 | USB-serial (`/dev/ttyUSB0`, 9600 baud) | Sets HV current setpoint, controls laser on/off, sets pulse parameters |
+| LaserPulser4_1 | USB-serial (9600 baud, selectable port) | Sets HV current setpoint, controls laser on/off, sets pulse parameters |
 | PicoScope 2000 | USB | Ch-A: laser current (triggered peak detection on negative pulse) |
 | Thorlabs PM100A | USB (`/dev/usbtmc0`) | Optical power measurement via SCPI over USBTMC |
 
@@ -25,13 +25,13 @@ A Qt6 desktop application for measuring and plotting laser diode **current vs. o
 
 ### Oscilloscope wiring
 
-- **Channel A** — current-sense output (negative pulse, ~150 ns); triggered on falling edge at −1000 ADU. Peak of the captured waveform = pulse amplitude.
+- **Channel A** — current-sense output (negative pulse, ~150 ns); triggered on falling edge at −5000 ADU. Peak of the captured waveform is used as the pulse amplitude.
 
 ### PM100A setup
 
 - Auto-ranging enabled, units: Watts
-- Wavelength correction: configurable via `Powermeter::setWavelength(nm)`
-- Hardware averaging: 100 samples (~300 ms per reading)
+- Wavelength correction: 1550 nm default; configurable via `Powermeter::setWavelength(nm)` before `start()`
+- Hardware averaging: 100 samples (~300 ms per reading), 500 ms pause between queries
 
 ---
 
@@ -52,7 +52,7 @@ sudo dnf install qt6-qtbase-devel qt6-qtserialport-devel
 
 **Install libps2000** from [picotech.com/downloads/linux](https://www.picotech.com/downloads/linux) into `/opt/picoscope/`.
 
-**PM100A USB permissions** (run once):
+**PM100A USB permissions** (run once, then replug the device):
 ```bash
 echo 'SUBSYSTEM=="usb", ATTRS{idVendor}=="1313", ATTRS{idProduct}=="8079", MODE="0666"' \
   | sudo tee /etc/udev/rules.d/99-thorlabs-pm100a.rules
@@ -71,7 +71,11 @@ cmake ../src
 cmake --build . -j$(nproc)
 ```
 
-The binary is written to `bin/WM`.
+The binary is written to `bin/WM`. To install:
+
+```bash
+cmake --install build   # copies binary to install/bin/, docs to install/share/doc/WM/
+```
 
 ### Build for Raspberry Pi (native)
 
@@ -94,9 +98,9 @@ sudo apt update && sudo apt install libps2000
 ./bin/WM
 ```
 
-Connect devices in any order using the top buttons:
+Connect devices in any order using the top bar buttons:
 
-1. **connect pulser** — opens `/dev/ttyUSB0`, sets default pulse parameters, laser OFF
+1. Select the pulser serial port from the dropdown (use **↺** to refresh if the device was just plugged in), then click **connect pulser** — sets default pulse parameters, laser OFF
 2. **connect osc** — opens PicoScope 2000, configures trigger
 3. **connect PM** — opens `/dev/usbtmc0`, configures PM100A
 
@@ -106,19 +110,42 @@ The **Start** button enables automatically once all three devices are connected.
 
 ## Measurement
 
-1. Set sweep range: **n from / step / to** and bank **b** (1 or 2)
+1. Set sweep parameters: **n from / step / to** (HV DAC values 0–4095) and bank **b** (1 or 2)
 2. Press **Start** — the sweep begins:
    - Laser turns ON, HV set to `n_from`
-   - Every 1 second: snapshot current (oscilloscope) + power (PM100A) → plot point
+   - Every 1 second: snapshot current (oscilloscope) + power (PM100A) → plot one point
    - HV advances by `step`; laser stays ON throughout
-   - At `n_to`: laser turns OFF, Start button re-enables
+   - At `n_to`: laser turns OFF, Start re-enables
 3. The I-P curve is plotted live (current on X-axis, power in mW on Y-axis)
 
 **Validation:** `n_from` must be less than `n_to`, and `step` must be smaller than the range.
 
+### During a sweep
+
+| Button | Action |
+|--------|--------|
+| **Start** (becomes **Pause**) | Pause the timer; laser and HV remain unchanged |
+| **Pause** (becomes **Resume**) | Resume from where it stopped |
+| **Stop** | Abort sweep, turn laser off |
+
 ### Laser checkbox
 
-The **laser ON** checkbox controls the laser driver independently of the sweep. Useful for manual operation or keeping the laser warm between sweeps.
+The **laser ON** checkbox controls the laser driver independently of the sweep — useful for manual checks or keeping the laser warm between sweeps.
+
+---
+
+## Saving data
+
+Click **Save data** after a sweep. The exported `.txt` file is tab-separated with a comment header:
+
+```
+# IP characterisation — 2026-05-17T14:32:01
+# HV n_from=100 n_step=50 n_to=2000 b=1
+# Points: 39
+HV_n    Current_V    Power_mW
+100     0.00443      1.234
+...
+```
 
 ---
 
@@ -128,14 +155,17 @@ The **laser ON** checkbox controls the laser driver independently of the sweep. 
 src/
   main.cpp            — Qt entry point
   wm.h / wm.cpp       — main window: UI logic, sweep control, device coordination
-  oscilloscope.h/cpp  — Osc (QThread): continuous triggered peak acquisition via PicoScope
-  powermeter.h/cpp    — Powermeter (QThread): continuous MEAS:POW? via PM100A USBTMC
-  pulser.h/cpp        — Pulser (QObject, runs in pulserThread): serial control of laser driver
-  wm.ui               — Qt Designer layout (1430 × 876)
+  oscilloscope.h/cpp  — Osc (QThread): triggered peak acquisition via PicoScope
+  powermeter.h/cpp    — Powermeter (QThread): MEAS:POW? loop via PM100A USBTMC
+  pulser.h/cpp        — Pulser (QObject, pulserThread): serial control of laser driver
+  wm.ui               — Qt Designer layout
   qcustomplot.h/cpp   — QCustomPlot 2.1.1 (bundled)
   CMakeLists.txt
+  CMakePresets.json
 bin/
   WM                  — compiled binary
+build/                — CMake build artifacts
+install/              — cmake --install output
 ```
 
 ### Threading model
@@ -143,6 +173,6 @@ bin/
 | Component | Thread | Communication |
 |-----------|--------|---------------|
 | `WM` (UI) | Main thread | Qt signals/slots |
-| `Osc` | `osc` thread | emits `sendData(A, B)` → `WM::read_values()` |
+| `Osc` | `osc` thread | emits `sendData(current_V)` → `WM::read_values()` |
 | `Powermeter` | `pm` thread | emits `sendPower(W)` → `WM::read_power()` |
-| `Pulser` | `pulserThread` | receives signals from WM via queued connection |
+| `Pulser` | `pulserThread` | receives queued signals from WM; never blocks the UI |

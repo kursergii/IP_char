@@ -40,6 +40,9 @@ class Osc : public QThread
     short buffer_b[NUM_VALUES];
     double peaks[NUM_BLOCKS];   // reused across calls; stores per-block Ch-A peaks
 
+    short max_A = 0;   // max peak ADU from last run_osc(); used by check_val() for ranging
+    short max_B = 0;   // Ch-B mean ADU (unused for power — PM100A handles that)
+
     int32_t time_indisposed_ms = 100;
     short overflow = 0;
 
