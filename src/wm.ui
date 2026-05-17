@@ -1,0 +1,510 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>WM</class>
+ <widget class="QMainWindow" name="WM">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>1515</width>
+    <height>969</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>WM</string>
+  </property>
+  <widget class="QWidget" name="centralWidget">
+   <widget class="QPushButton" name="pushButton_open_com">
+    <property name="geometry">
+     <rect>
+      <x>40</x>
+      <y>0</y>
+      <width>94</width>
+      <height>27</height>
+     </rect>
+    </property>
+    <property name="text">
+     <string>connect com</string>
+    </property>
+   </widget>
+   <widget class="QPushButton" name="pushButton_open_pulser">
+    <property name="geometry">
+     <rect>
+      <x>40</x>
+      <y>0</y>
+      <width>94</width>
+      <height>27</height>
+     </rect>
+    </property>
+    <property name="text">
+     <string>connect pulser</string>
+    </property>
+   </widget>
+   <widget class="QPushButton" name="pushButton_open_osc">
+    <property name="geometry">
+     <rect>
+      <x>170</x>
+      <y>0</y>
+      <width>94</width>
+      <height>27</height>
+     </rect>
+    </property>
+    <property name="text">
+     <string>connect osc</string>
+    </property>
+   </widget>
+   <widget class="QPushButton" name="pushButton_open_pm">
+    <property name="geometry">
+     <rect>
+      <x>300</x>
+      <y>0</y>
+      <width>94</width>
+      <height>27</height>
+     </rect>
+    </property>
+    <property name="text">
+     <string>connect PM</string>
+    </property>
+   </widget>
+   <widget class="QComboBox" name="comboBox_port">
+    <property name="geometry">
+     <rect>
+      <x>410</x>
+      <y>0</y>
+      <width>160</width>
+      <height>27</height>
+     </rect>
+    </property>
+   </widget>
+   <widget class="QPushButton" name="pushButton_refresh_ports">
+    <property name="geometry">
+     <rect>
+      <x>575</x>
+      <y>0</y>
+      <width>27</width>
+      <height>27</height>
+     </rect>
+    </property>
+    <property name="text">
+     <string>↺</string>
+    </property>
+    <property name="toolTip">
+     <string>Refresh serial port list</string>
+    </property>
+   </widget>
+   <widget class="QCustomPlot" name="customPlot" native="true">
+    <property name="geometry">
+     <rect>
+      <x>10</x>
+      <y>30</y>
+      <width>1131</width>
+      <height>781</height>
+     </rect>
+    </property>
+   </widget>
+   <widget class="QGroupBox" name="groupBox">
+    <property name="enabled">
+     <bool>false</bool>
+    </property>
+    <property name="geometry">
+     <rect>
+      <x>1150</x>
+      <y>10</y>
+      <width>271</width>
+      <height>801</height>
+     </rect>
+    </property>
+    <property name="title">
+     <string>...</string>
+    </property>
+    <widget class="QPushButton" name="pushButton_save_data">
+     <property name="geometry">
+      <rect>
+       <x>10</x>
+       <y>560</y>
+       <width>251</width>
+       <height>141</height>
+      </rect>
+     </property>
+     <property name="font">
+      <font>
+       <pointsize>14</pointsize>
+       <bold>true</bold>
+      </font>
+     </property>
+     <property name="text">
+      <string>Save data</string>
+     </property>
+    </widget>
+    <widget class="QSpinBox" name="spinBox_HV_n_from">
+     <property name="geometry">
+      <rect>
+       <x>80</x>
+       <y>200</y>
+       <width>81</width>
+       <height>25</height>
+      </rect>
+     </property>
+     <property name="font">
+      <font>
+       <pointsize>16</pointsize>
+       <bold>true</bold>
+      </font>
+     </property>
+     <property name="minimum">
+      <number>1</number>
+     </property>
+     <property name="maximum">
+      <number>4095</number>
+     </property>
+     <property name="value">
+      <number>1</number>
+     </property>
+     <property name="displayIntegerBase">
+      <number>10</number>
+     </property>
+    </widget>
+    <widget class="QLabel" name="label_power">
+     <property name="geometry">
+      <rect>
+       <x>160</x>
+       <y>350</y>
+       <width>91</width>
+       <height>20</height>
+      </rect>
+     </property>
+     <property name="font">
+      <font>
+       <pointsize>16</pointsize>
+       <bold>true</bold>
+      </font>
+     </property>
+     <property name="text">
+      <string>0.00</string>
+     </property>
+    </widget>
+    <widget class="QLabel" name="label_hv">
+     <property name="geometry">
+      <rect>
+       <x>20</x>
+       <y>378</y>
+       <width>231</width>
+       <height>20</height>
+      </rect>
+     </property>
+     <property name="font">
+      <font>
+       <pointsize>14</pointsize>
+       <bold>true</bold>
+      </font>
+     </property>
+     <property name="text">
+      <string>HV: —</string>
+     </property>
+    </widget>
+    <widget class="QPushButton" name="pushButton_start">
+     <property name="geometry">
+      <rect>
+       <x>10</x>
+       <y>30</y>
+       <width>251</width>
+       <height>141</height>
+      </rect>
+     </property>
+     <property name="font">
+      <font>
+       <pointsize>21</pointsize>
+       <bold>true</bold>
+      </font>
+     </property>
+     <property name="text">
+      <string>Start</string>
+     </property>
+     <property name="flat">
+      <bool>false</bool>
+     </property>
+    </widget>
+    <widget class="QLabel" name="label_6">
+     <property name="geometry">
+      <rect>
+       <x>100</x>
+       <y>180</y>
+       <width>121</width>
+       <height>20</height>
+      </rect>
+     </property>
+     <property name="font">
+      <font>
+       <pointsize>16</pointsize>
+       <bold>true</bold>
+      </font>
+     </property>
+     <property name="text">
+      <string>n              b</string>
+     </property>
+    </widget>
+    <widget class="QLabel" name="label_current">
+     <property name="geometry">
+      <rect>
+       <x>160</x>
+       <y>325</y>
+       <width>91</width>
+       <height>20</height>
+      </rect>
+     </property>
+     <property name="font">
+      <font>
+       <pointsize>16</pointsize>
+       <bold>true</bold>
+      </font>
+     </property>
+     <property name="text">
+      <string>0.00</string>
+     </property>
+    </widget>
+    <widget class="QSpinBox" name="spinBox_HV_b">
+     <property name="geometry">
+      <rect>
+       <x>180</x>
+       <y>240</y>
+       <width>41</width>
+       <height>25</height>
+      </rect>
+     </property>
+     <property name="font">
+      <font>
+       <pointsize>16</pointsize>
+       <bold>true</bold>
+      </font>
+     </property>
+     <property name="minimum">
+      <number>1</number>
+     </property>
+     <property name="maximum">
+      <number>2</number>
+     </property>
+    </widget>
+    <widget class="QLabel" name="label">
+     <property name="geometry">
+      <rect>
+       <x>20</x>
+       <y>325</y>
+       <width>121</width>
+       <height>20</height>
+      </rect>
+     </property>
+     <property name="font">
+      <font>
+       <pointsize>14</pointsize>
+       <bold>true</bold>
+      </font>
+     </property>
+     <property name="text">
+      <string>Current, A:</string>
+     </property>
+    </widget>
+    <widget class="QLabel" name="label_3">
+     <property name="geometry">
+      <rect>
+       <x>20</x>
+       <y>350</y>
+       <width>131</width>
+       <height>20</height>
+      </rect>
+     </property>
+     <property name="font">
+      <font>
+       <pointsize>14</pointsize>
+       <bold>true</bold>
+      </font>
+     </property>
+     <property name="text">
+      <string>Power, mW</string>
+     </property>
+    </widget>
+    <widget class="QCheckBox" name="checkBox_laser_on">
+     <property name="geometry">
+      <rect>
+       <x>80</x>
+       <y>750</y>
+       <width>131</width>
+       <height>41</height>
+      </rect>
+     </property>
+     <property name="font">
+      <font>
+       <pointsize>16</pointsize>
+       <bold>true</bold>
+      </font>
+     </property>
+     <property name="text">
+      <string>laser ON</string>
+     </property>
+    </widget>
+    <widget class="QPushButton" name="pushButton_stop">
+     <property name="enabled">
+      <bool>false</bool>
+     </property>
+     <property name="geometry">
+      <rect>
+       <x>10</x>
+       <y>410</y>
+       <width>251</width>
+       <height>141</height>
+      </rect>
+     </property>
+     <property name="font">
+      <font>
+       <pointsize>21</pointsize>
+       <bold>true</bold>
+      </font>
+     </property>
+     <property name="text">
+      <string>Stop</string>
+     </property>
+     <property name="flat">
+      <bool>false</bool>
+     </property>
+    </widget>
+    <widget class="QSpinBox" name="spinBox_HV_n_to">
+     <property name="geometry">
+      <rect>
+       <x>80</x>
+       <y>240</y>
+       <width>81</width>
+       <height>25</height>
+      </rect>
+     </property>
+     <property name="font">
+      <font>
+       <pointsize>16</pointsize>
+       <bold>true</bold>
+      </font>
+     </property>
+     <property name="minimum">
+      <number>1</number>
+     </property>
+     <property name="maximum">
+      <number>4095</number>
+     </property>
+     <property name="value">
+      <number>4095</number>
+     </property>
+     <property name="displayIntegerBase">
+      <number>10</number>
+     </property>
+    </widget>
+    <widget class="QLabel" name="label_2">
+     <property name="geometry">
+      <rect>
+       <x>10</x>
+       <y>200</y>
+       <width>58</width>
+       <height>21</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>from</string>
+     </property>
+    </widget>
+    <widget class="QLabel" name="label_4">
+     <property name="geometry">
+      <rect>
+       <x>10</x>
+       <y>240</y>
+       <width>58</width>
+       <height>21</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>to</string>
+     </property>
+    </widget>
+    <widget class="QSpinBox" name="spinBox_HV_n_step">
+     <property name="geometry">
+      <rect>
+       <x>80</x>
+       <y>280</y>
+       <width>81</width>
+       <height>25</height>
+      </rect>
+     </property>
+     <property name="font">
+      <font>
+       <pointsize>16</pointsize>
+       <bold>true</bold>
+      </font>
+     </property>
+     <property name="minimum">
+      <number>1</number>
+     </property>
+     <property name="maximum">
+      <number>500</number>
+     </property>
+     <property name="value">
+      <number>100</number>
+     </property>
+     <property name="displayIntegerBase">
+      <number>10</number>
+     </property>
+    </widget>
+    <widget class="QLabel" name="label_5">
+     <property name="geometry">
+      <rect>
+       <x>10</x>
+       <y>280</y>
+       <width>58</width>
+       <height>21</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>step</string>
+     </property>
+    </widget>
+   </widget>
+   <widget class="QPushButton" name="pushButton_clear_data">
+    <property name="geometry">
+     <rect>
+      <x>1020</x>
+      <y>0</y>
+      <width>94</width>
+      <height>27</height>
+     </rect>
+    </property>
+    <property name="text">
+     <string>clear data</string>
+    </property>
+   </widget>
+  </widget>
+  <widget class="QMenuBar" name="menuBar">
+   <property name="geometry">
+    <rect>
+     <x>0</x>
+     <y>0</y>
+     <width>1515</width>
+     <height>30</height>
+    </rect>
+   </property>
+  </widget>
+  <widget class="QToolBar" name="mainToolBar">
+   <attribute name="toolBarArea">
+    <enum>TopToolBarArea</enum>
+   </attribute>
+   <attribute name="toolBarBreak">
+    <bool>false</bool>
+   </attribute>
+  </widget>
+  <widget class="QStatusBar" name="statusBar"/>
+ </widget>
+ <layoutdefault spacing="6" margin="11"/>
+ <customwidgets>
+  <customwidget>
+   <class>QCustomPlot</class>
+   <extends>QWidget</extends>
+   <header>qcustomplot.h</header>
+   <container>1</container>
+  </customwidget>
+ </customwidgets>
+ <resources/>
+ <connections/>
+</ui>

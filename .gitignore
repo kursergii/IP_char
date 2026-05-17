@@ -1,0 +1,17 @@
+# Build output
+build/
+bin/WM
+
+# Qt Creator user settings (machine-specific)
+*.pro.user
+*.pro.user.*
+
+# CMake cache
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+
+# Editor
+.vscode/*.json
+!.vscode/c_cpp_properties.json
