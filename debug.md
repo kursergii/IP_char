@@ -1,6 +1,6 @@
 # Debug & Improvement Notes
 
-_Last updated: 2026-05-17_
+_Last updated: 2026-06-11_
 
 ---
 
@@ -11,8 +11,7 @@ _Last updated: 2026-05-17_
 - Add a `QDoubleSpinBox` for calibration gain in the UI, or hardcode if R_sense is fixed.
 - Apply: `ret_A = max_A * range_values[range_a] * calibration_gain`
 
-**2. Oscilloscope trigger quality unverified**
-Distribution logging showed `stddev ≈ mean` (bimodal: real pulses mixed with noise/auto-trigger captures). Must confirm reliable triggering before release, then **remove the diagnostic `qWarning` block** from `run_osc()`.
+**~~2. Oscilloscope trigger quality unverified~~** ✅ Fixed — diagnostic `qWarning` distribution-logging block removed from `run_osc()`.
 
 **3. Ch-B still acquired (wasteful)**
 `buffer_b`, `max_B`, `range_b` and Ch-B auto-ranging are still computed every cycle despite Ch-B being unused (PM100A handles power). Disable Ch-B and remove its processing — saves ~15% acquisition time per cycle.
@@ -23,8 +22,7 @@ Distribution logging showed `stddev ≈ mean` (bimodal: real pulses mixed with n
 
 **~~4. Port list not refreshable~~** ✅ Fixed — `↺` refresh button added next to the comboBox.
 
-**5. `check_val()` oscillation risk**
-If the signal amplitude sits exactly at the 5 000 or 25 000 ADU ranging threshold, the auto-ranging loop alternates ±1 indefinitely. Add a maximum iteration count (e.g., 20) to guarantee termination.
+**~~5. `check_val()` oscillation risk~~** ✅ Fixed — `check_val()` now bails out after `MAX_RERANGE_STEPS` (20) range adjustments instead of looping forever if the signal sits on a range boundary.
 
 **6. PM100A wavelength not configurable from UI**
 `wavelength_nm` defaults to 1550 nm and can only be changed by calling `setWavelength()` before `start()`. Add a `QSpinBox` so the user can set it without recompiling.
@@ -43,3 +41,19 @@ Native build on RPi OS Bookworm: install `qt6-base-dev`, `libqt6serialport6-dev`
 
 **10. Save file column header says `Current_V`**
 Once calibration (#1) is applied, rename to `Current_A` and use calibrated values.
+
+**11. Osc shutdown can block up to ~5 s**
+If the app is closed while `Osc::openDevice()` is still polling for the PicoScope (up to 5 s timeout), `osc.wait()` in `WM::~WM()` blocks until that polling finishes. Only affects "close immediately after clicking Connect".
+
+**12. `src/wm_ui.py` is a stale artifact**
+Tracked PySide6-generated file from an older 1515×969 layout with different widget names than the current `wm.ui` (e.g. `pushButton_open_com`, separate per-device connect buttons). Not used by the CMake build — safe to delete or regenerate.
+
+---
+
+## ✅ Fixed this session
+
+- **`check_val()` oscillation guard** — added `MAX_RERANGE_STEPS` (20) limit (see #5 above).
+- **PicoScope handle leak on shutdown** — `Osc::running()` now calls `ps2000_close_unit(handle)` after the acquisition loop exits, mirroring `Powermeter::running()`'s `::close(fd)`.
+- **Wrong serial port silently "connected" as pulser** — `Pulser::open()` now requires a non-empty response to `?V` before reporting success; on timeout it closes the port and emits `connectionResult(false)`.
+- **"clear data" button wired up** — `pushButton_clear_data` now calls `WM::clear_data()`, sharing a `clearPlotData()` helper with `startMeasurement()`.
+- **Three connect buttons merged into one** — `pushButton_open_pulser/osc/pm` replaced by a single `pushButton_connect` → `connectAll()`, which retries only the not-yet-connected devices and shows a per-device warning dialog on failure.

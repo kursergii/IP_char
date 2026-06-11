@@ -37,11 +37,9 @@ signals:
 
 public slots:
     // Device connection
-    void startPulser();
+    void connectAll();
     void onPulserConnected(bool success);
-    void startOscilloscope();
     void onOscConnected(bool success);
-    void startPowermeter();
     void onPmConnected(bool success);
 
     // Measurement control
@@ -56,6 +54,7 @@ public slots:
 
     void laser_ON();
     void save_data();
+    void clear_data();
     void refreshPorts();
 
 private:
@@ -85,6 +84,10 @@ private:
 
     void connects();
     void checkAllConnected();
+    void clearPlotData();
+    void connectPulser();
+    void connectOscilloscope();
+    void connectPowermeter();
 
     bool pulser_connected = false;
     bool osc_connected    = false;

@@ -35,6 +35,7 @@ class Osc : public QThread
     // ── Internal acquisition buffers ─────────────────────────────────────────
     static constexpr int NUM_VALUES  = 1024;  // samples per block
     static constexpr int NUM_BLOCKS  = 100;   // blocks averaged per measurement
+    static constexpr int MAX_RERANGE_STEPS = 20;  // guards against range oscillation in check_val()
 
     short buffer_a[NUM_VALUES];
     short buffer_b[NUM_VALUES];

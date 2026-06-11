@@ -28,7 +28,16 @@ void Pulser::open(const QString &port)
         return;
     }
 
-    qWarning() << "Pulser connected:" << send("?V");
+    // Confirm a LaserPulser4_1 is actually on this port before configuring it —
+    // open() succeeds for any serial device, even one that never replies.
+    QString version = send("?V");
+    if (version.isEmpty()) {
+        qWarning() << "Pulser: no response to ?V on" << port_name << "- wrong port?";
+        serial->close();
+        emit connectionResult(false);
+        return;
+    }
+    qWarning() << "Pulser connected:" << version;
 
     // Set default pulse parameters:
     //   P:3,200  → width=150 ns (3×50 ns), period=10 µs (200×50 ns) = 100 kHz base rate

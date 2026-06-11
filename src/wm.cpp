@@ -64,19 +64,24 @@ WM::~WM()
 }
 
 void WM::connects() {
-    connect(ui->pushButton_open_pulser, &QPushButton::clicked, this, &WM::startPulser);
-    connect(ui->pushButton_open_osc,    &QPushButton::clicked, this, &WM::startOscilloscope);
-    connect(ui->pushButton_open_pm,     &QPushButton::clicked, this, &WM::startPowermeter);
+    connect(ui->pushButton_connect,     &QPushButton::clicked, this, &WM::connectAll);
     connect(ui->pushButton_start,       &QPushButton::clicked, this, &WM::onStartClicked);
     connect(ui->pushButton_stop,        &QPushButton::clicked, this, &WM::stopMeasurement);
     connect(ui->pushButton_save_data,      &QPushButton::clicked, this, &WM::save_data);
+    connect(ui->pushButton_clear_data,     &QPushButton::clicked, this, &WM::clear_data);
     connect(ui->pushButton_refresh_ports,  &QPushButton::clicked, this, &WM::refreshPorts);
     connect(ui->checkBox_laser_on,         &QCheckBox::clicked,   this, &WM::laser_ON);
 }
 
 // ── Device connection ──────────────────────────────────────────────────────────
 
-void WM::startPulser() {
+void WM::connectAll() {
+    if (!pulser_connected) connectPulser();
+    if (!osc_connected)    connectOscilloscope();
+    if (!pm_connected)     connectPowermeter();
+}
+
+void WM::connectPulser() {
     if (ui->comboBox_port->currentText().isEmpty()) {
         QMessageBox::warning(this, "Pulser", "No serial port selected.");
         return;
@@ -87,8 +92,6 @@ void WM::startPulser() {
 void WM::onPulserConnected(bool success) {
     if (success) {
         pulser_connected = true;
-        ui->pushButton_open_pulser->setEnabled(false);
-        ui->pushButton_open_pulser->setText("connected pulser");
         checkAllConnected();
     } else {
         QMessageBox::warning(this, "Pulser",
@@ -96,43 +99,40 @@ void WM::onPulserConnected(bool success) {
     }
 }
 
-void WM::startOscilloscope() {
+void WM::connectOscilloscope() {
     osc.start();
 }
 
 void WM::onOscConnected(bool success) {
     if (success) {
         osc_connected = true;
-        ui->pushButton_open_osc->setEnabled(false);
-        ui->pushButton_open_osc->setText("connected osc");
         checkAllConnected();
     } else {
         QMessageBox::warning(this, "Oscilloscope",
             "Failed to connect to PicoScope.\nCheck the USB connection and try again.");
-        ui->pushButton_open_osc->setEnabled(true);
     }
 }
 
-void WM::startPowermeter() {
+void WM::connectPowermeter() {
     pm.start();
 }
 
 void WM::onPmConnected(bool success) {
     if (success) {
         pm_connected = true;
-        ui->pushButton_open_pm->setEnabled(false);
-        ui->pushButton_open_pm->setText("connected PM");
         checkAllConnected();
     } else {
         QMessageBox::warning(this, "Powermeter",
             "Failed to connect to PM100A.\nCheck the USB connection and try again.");
-        ui->pushButton_open_pm->setEnabled(true);
     }
 }
 
 void WM::checkAllConnected() {
-    if (pulser_connected && osc_connected && pm_connected)
+    if (pulser_connected && osc_connected && pm_connected) {
         ui->groupBox->setEnabled(true);
+        ui->pushButton_connect->setEnabled(false);
+        ui->pushButton_connect->setText("Connected");
+    }
 }
 
 // ── Data receivers (called via queued connections from worker threads) ─────────
@@ -169,6 +169,16 @@ void WM::laser_ON() {
 
 // ── Measurement sweep ──────────────────────────────────────────────────────────
 
+void WM::clearPlotData() {
+    DATA[0].clear();
+    DATA[1].clear();
+    customPlot->graph(0)->data()->clear();
+    customPlot->replot();
+
+    // Reset incremental axis bounds
+    xMin = xMax = yMin = yMax = 0;
+}
+
 void WM::onStartClicked() {
     if (!measureTimer.isActive() && !m_paused) {
         startMeasurement();
@@ -199,13 +209,7 @@ void WM::startMeasurement() {
         return;
     }
 
-    DATA[0].clear();
-    DATA[1].clear();
-    customPlot->graph(0)->data()->clear();
-    customPlot->replot();
-
-    // Reset incremental axis bounds
-    xMin = xMax = yMin = yMax = 0;
+    clearPlotData();
 
     sweep_n = n_from;
     emit requestSetHV(sweep_n, ui->spinBox_HV_b->value());
@@ -317,4 +321,8 @@ void WM::save_data() {
 
     file.close();
     qInfo() << "Saved" << DATA[0].size() << "points to" << fileName;
+}
+
+void WM::clear_data() {
+    clearPlotData();
 }

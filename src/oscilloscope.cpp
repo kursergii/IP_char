@@ -10,6 +10,7 @@ void Osc::running() {
         check_val();
         emit sendData(ret_A);
     }
+    ps2000_close_unit(handle);
 }
 
 void Osc::openDevice() {
@@ -91,9 +92,10 @@ void Osc::check_val() {
     // to maximise dynamic range without clipping.
     // Re-acquire after every range step; loop until stable or at a range limit.
     //
-    // Potential improvement: add an oscillation guard — if the signal sits exactly
-    // at a range boundary, successive +1/−1 adjustments can loop indefinitely.
+    // If the signal sits exactly at a range boundary, successive +1/-1 adjustments
+    // could otherwise oscillate forever, so bail out after MAX_RERANGE_STEPS.
     bool rerange;
+    int steps = 0;
     do {
         rerange = false;
         if      (max_A > 25000 && range_a < 10) { ++range_a; rerange = true; }
@@ -101,5 +103,5 @@ void Osc::check_val() {
         if      (max_B > 25000 && range_b < 10) { ++range_b; rerange = true; }
         else if (max_B <  5000 && range_b >  2) { --range_b; rerange = true; }
         if (rerange) run_osc();
-    } while (rerange);
+    } while (rerange && ++steps < MAX_RERANGE_STEPS);
 }
