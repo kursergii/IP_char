@@ -289,12 +289,13 @@ void WM::save_data() {
         return;
     }
 
+    QString defaultName = "IV-" + QDateTime::currentDateTime().toString("yyyy-MM-dd_HHmmss") + ".csv";
     QString fileName = QFileDialog::getSaveFileName(this,
-        "Save data", "", "Tab-separated (*.txt);;All files (*)");
+        "Save data", defaultName, "CSV (*.csv);;Tab-separated (*.txt);;All files (*)");
     if (fileName.isEmpty())
         return;
-    if (!fileName.endsWith(".txt"))
-        fileName += ".txt";
+    if (!fileName.contains('.'))
+        fileName += ".csv";
 
     QFile file(fileName);
     if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
