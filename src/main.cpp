@@ -21,7 +21,11 @@ int main(int argc, char *argv[])
     // Fusion style: consistent look across desktop and the Raspberry Pi touchscreen
     QQuickStyle::setStyle("Fusion");
 
-    Controller controller;
+    // -sim / --sim : run with synthesised data, no hardware required
+    const QStringList args = QCoreApplication::arguments();
+    const bool simulate = args.contains("-sim") || args.contains("--sim");
+
+    Controller controller(simulate);
 
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty("controller", &controller);

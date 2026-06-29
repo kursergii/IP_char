@@ -97,8 +97,14 @@ sudo apt update && sudo apt install libps2000
 ## Running
 
 ```bash
-./bin/WM
+./bin/WM          # normal mode (requires hardware)
+./bin/WM -sim     # simulation mode — synthesises a laser L-I curve, no hardware needed
 ```
+
+In **simulation mode** the title bar shows `[SIMULATION]`, **Connect** marks all
+three devices connected instantly, and a sweep generates a realistic
+threshold-plus-slope L-I curve (sped up to ~250 ms/point) so the UI, plotting and
+CSV export can be exercised without any instruments attached.
 
 Connect all devices at once from the top bar:
 

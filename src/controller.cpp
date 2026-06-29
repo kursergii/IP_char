@@ -4,11 +4,16 @@
 #include <QFile>
 #include <QTextStream>
 #include <QDateTime>
+#include <QRandomGenerator>
 #include <QDebug>
+#include <algorithm>
 #include <cmath>
 
-Controller::Controller(QObject *parent) : QObject(parent)
+Controller::Controller(bool simulate, QObject *parent) : QObject(parent), m_sim(simulate)
 {
+    if (m_sim)
+        qInfo() << "Controller: SIMULATION mode — no hardware will be accessed";
+
     DATA.resize(2);  // DATA[0] = current (V), DATA[1] = power (mW)
 
     connect(&measureTimer, &QTimer::timeout, this, &Controller::onMeasurementStep);
@@ -57,6 +62,15 @@ void Controller::refreshPorts()
 
 void Controller::connectDevices(const QString &port)
 {
+    if (m_sim) {
+        m_pulserConnected = m_oscConnected = m_pmConnected = true;
+        emit pulserConnectedChanged();
+        emit oscConnectedChanged();
+        emit pmConnectedChanged();
+        emit allConnectedChanged();
+        return;
+    }
+
     if (!m_pulserConnected) {
         if (port.isEmpty()) {
             emit warning("Pulser", "No serial port selected.");
@@ -124,8 +138,10 @@ void Controller::read_power(double watts)
 
 void Controller::setLaser(bool on)
 {
-    if (on) emit requestLaserOn();
-    else    emit requestLaserOff();
+    if (!m_sim) {
+        if (on) emit requestLaserOn();
+        else    emit requestLaserOff();
+    }
     setLaserState(on);
 }
 
@@ -150,7 +166,7 @@ void Controller::startOrPause(int nFrom, int nTo, int nStep, int b)
         setPaused(true);
     } else {
         // Resume from pause
-        measureTimer.start(1000);
+        measureTimer.start(m_sim ? 250 : 1000);
         setMeasuring(true);
         setPaused(false);
     }
@@ -174,17 +190,16 @@ void Controller::startMeasurement(int nFrom, int nTo, int nStep, int b)
     m_b     = b;
     sweep_n = nFrom;
 
-    emit requestSetHV(sweep_n, m_b);
-    m_hvLabel = QString("HV: n=%1, b=%2").arg(sweep_n).arg(m_b);
-    emit hvLabelChanged();
+    applyHV(sweep_n, m_b);
 
-    emit requestLaserOn();
+    if (!m_sim) emit requestLaserOn();
     setLaserState(true);
     setMeasuring(true);
     setPaused(false);
 
-    // First timer fire is the first measurement (1 s settling time for the laser)
-    measureTimer.start(1000);
+    // First timer fire is the first measurement (1 s settling time for the laser;
+    // faster in simulation since there is nothing to settle)
+    measureTimer.start(m_sim ? 250 : 1000);
 }
 
 void Controller::stop()
@@ -192,7 +207,7 @@ void Controller::stop()
     measureTimer.stop();
     setMeasuring(false);
     setPaused(false);
-    emit requestLaserOff();
+    if (!m_sim) emit requestLaserOff();
     setLaserState(false);
     m_hvLabel = "HV: —";
     emit hvLabelChanged();
@@ -219,9 +234,7 @@ void Controller::onMeasurementStep()
         finishSweep();
         qInfo() << "Measurement complete," << pointCount() << "points";
     } else {
-        emit requestSetHV(sweep_n, m_b);
-        m_hvLabel = QString("HV: n=%1, b=%2").arg(sweep_n).arg(m_b);
-        emit hvLabelChanged();
+        applyHV(sweep_n, m_b);
     }
 }
 
@@ -230,10 +243,45 @@ void Controller::finishSweep()
     measureTimer.stop();
     setMeasuring(false);
     setPaused(false);
-    emit requestLaserOff();
+    if (!m_sim) emit requestLaserOff();
     setLaserState(false);
     m_hvLabel = "HV: —";
     emit hvLabelChanged();
+}
+
+// ── HV setpoint: drive hardware, or synthesise data in simulation mode ───────────
+
+void Controller::applyHV(int n, int b)
+{
+    m_hvLabel = QString("HV: n=%1, b=%2").arg(n).arg(b);
+    emit hvLabelChanged();
+
+    if (m_sim) applySimHV(n, b);
+    else       emit requestSetHV(n, b);
+}
+
+void Controller::applySimHV(int n, int b)
+{
+    // Synthetic laser-diode model for UI testing without hardware.
+    // Drive ∝ HV setpoint; optical power follows an L-I curve (threshold + slope).
+    auto noise = [](double frac) {
+        return 1.0 + frac * (QRandomGenerator::global()->generateDouble() - 0.5);
+    };
+
+    double drive     = (n / 4096.0) * b;             // ~0 .. 2
+    double current_V = 0.05 * drive * noise(0.02);   // osc "current" reading, volts
+
+    const double I_th = 0.012;                        // lasing threshold (same V units)
+    double power_W = current_V > I_th ? 0.8 * (current_V - I_th) : 0.0;
+    power_W = std::max(0.0, power_W * noise(0.04));
+
+    latest_current = current_V;
+    m_currentValue = current_V;
+    emit currentChanged();
+
+    latest_power_W = power_W;
+    m_powerMW = power_W * 1000.0;
+    emit powerChanged();
 }
 
 void Controller::clearData()

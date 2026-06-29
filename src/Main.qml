@@ -12,7 +12,7 @@ ApplicationWindow {
     height: 680
     minimumWidth: 960
     minimumHeight: 600
-    title: "WM — I-P Characterisation"
+    title: "WM — I-P Characterisation" + (controller.simulated ? "  [SIMULATION]" : "")
 
     // ── Plot auto-range bookkeeping ──────────────────────────────────────────────
     property real xMin: 0

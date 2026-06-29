@@ -39,10 +39,13 @@ class Controller : public QObject
     Q_PROPERTY(bool paused    READ paused    NOTIFY pausedChanged)
     Q_PROPERTY(bool laserOn   READ laserOn   NOTIFY laserOnChanged)
     Q_PROPERTY(int  pointCount READ pointCount NOTIFY pointCountChanged)
+    Q_PROPERTY(bool simulated  READ simulated  CONSTANT)
 
 public:
-    explicit Controller(QObject *parent = nullptr);
+    explicit Controller(bool simulate = false, QObject *parent = nullptr);
     ~Controller();
+
+    bool simulated() const           { return m_sim; }
 
     QStringList ports() const        { return m_ports; }
     double currentValue() const      { return m_currentValue; }
@@ -110,6 +113,8 @@ private slots:
 
 private:
     void startMeasurement(int nFrom, int nTo, int nStep, int b);
+    void applyHV(int n, int b);      // set HV label + drive hardware (or simulate)
+    void applySimHV(int n, int b);   // compute simulated current/power for setpoint n,b
     void setMeasuring(bool m);
     void setPaused(bool p);
     void setLaserState(bool on);
@@ -128,6 +133,7 @@ private:
     double m_powerMW      = 0;
     QString m_hvLabel     = "HV: —";
 
+    bool m_sim             = false;  // simulation mode: synthesise data, no hardware
     bool m_pulserConnected = false;
     bool m_oscConnected    = false;
     bool m_pmConnected     = false;
