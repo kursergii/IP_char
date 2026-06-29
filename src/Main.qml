@@ -8,10 +8,10 @@ import QtGraphs
 ApplicationWindow {
     id: win
     visible: true
-    width: 1024
-    height: 600
-    minimumWidth: 900
-    minimumHeight: 540
+    width: 1100
+    height: 680
+    minimumWidth: 960
+    minimumHeight: 600
     title: "WM — I-P Characterisation"
 
     // ── Plot auto-range bookkeeping ──────────────────────────────────────────────
@@ -29,8 +29,8 @@ ApplicationWindow {
             xMin = Math.min(xMin, x); xMax = Math.max(xMax, x)
             yMin = Math.min(yMin, y); yMax = Math.max(yMax, y)
         }
-        var xs = (xMax - xMin < 1e-9) ? 1.0 : (xMax - xMin) * 0.05
-        var ys = (yMax - yMin < 1e-9) ? 1.0 : (yMax - yMin) * 0.05
+        var xs = (xMax - xMin < 1e-9) ? 1.0 : (xMax - xMin) * 0.08
+        var ys = (yMax - yMin < 1e-9) ? 1.0 : (yMax - yMin) * 0.08
         axX.min = xMin - xs; axX.max = xMax + xs
         axY.min = yMin - ys; axY.max = yMax + ys
     }
@@ -71,33 +71,65 @@ ApplicationWindow {
     // ── Layout ───────────────────────────────────────────────────────────────────
     ColumnLayout {
         anchors.fill: parent
-        anchors.margins: 8
-        spacing: 8
+        anchors.margins: 12
+        spacing: 12
 
         // Top bar: connection controls
         RowLayout {
             Layout.fillWidth: true
-            spacing: 6
+            spacing: 8
 
             Button {
                 text: controller.allConnected ? "Connected" : "Connect"
                 enabled: !controller.allConnected
+                implicitWidth: 110
                 onClicked: controller.connectDevices(portCombo.currentText)
             }
             ComboBox {
                 id: portCombo
-                Layout.preferredWidth: 180
+                Layout.preferredWidth: 200
                 model: controller.ports
             }
             Button {
                 text: "↺"
+                implicitWidth: 40
                 ToolTip.visible: hovered
                 ToolTip.text: "Refresh serial port list"
                 onClicked: controller.refreshPorts()
             }
+
+            // Connection status pills
+            Row {
+                spacing: 6
+                Layout.leftMargin: 12
+                Repeater {
+                    model: [
+                        { name: "Pulser", on: controller.pulserConnected },
+                        { name: "Osc",    on: controller.oscConnected },
+                        { name: "PM",     on: controller.pmConnected }
+                    ]
+                    delegate: Rectangle {
+                        required property var modelData
+                        width: lbl.implicitWidth + 18
+                        height: 26
+                        radius: 13
+                        color: modelData.on ? "#2e7d32" : "#9e9e9e"
+                        Label {
+                            id: lbl
+                            anchors.centerIn: parent
+                            text: modelData.name
+                            color: "white"
+                            font.pixelSize: 12
+                            font.bold: true
+                        }
+                    }
+                }
+            }
+
             Item { Layout.fillWidth: true }
+
             Button {
-                text: "clear data"
+                text: "Clear data"
                 onClicked: controller.clearData()
             }
         }
@@ -106,7 +138,7 @@ ApplicationWindow {
         RowLayout {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            spacing: 8
+            spacing: 12
 
             GraphsView {
                 id: graph
@@ -120,7 +152,7 @@ ApplicationWindow {
                     id: ipSeries
                     color: "#1f77b4"
                     pointDelegate: Rectangle {
-                        width: 10; height: 10; radius: 5
+                        width: 11; height: 11; radius: 6
                         color: "#1f77b4"
                         border.color: "#10456e"
                         border.width: 1
@@ -128,111 +160,138 @@ ApplicationWindow {
                 }
             }
 
-            // Control panel
-            ColumnLayout {
-                Layout.preferredWidth: 240
+            // ── Control panel ────────────────────────────────────────────────────
+            Frame {
+                Layout.preferredWidth: 290
                 Layout.fillHeight: true
                 enabled: controller.allConnected
-                spacing: 10
 
-                Button {
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: 64
-                    font.pointSize: 18
-                    font.bold: true
-                    text: controller.measuring ? "Pause"
-                                               : (controller.paused ? "Resume" : "Start")
-                    onClicked: controller.startOrPause(sbFrom.value, sbTo.value,
-                                                       sbStep.value, sbB.value)
-                }
-                Button {
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: 64
-                    font.pointSize: 18
-                    font.bold: true
-                    text: "Stop"
-                    enabled: controller.measuring || controller.paused
-                    onClicked: controller.stop()
-                }
+                ColumnLayout {
+                    anchors.fill: parent
+                    spacing: 14
 
-                // HV sweep parameters
-                GroupBox {
-                    Layout.fillWidth: true
-                    title: "HV sweep (n, b)"
-                    GridLayout {
-                        anchors.fill: parent
-                        columns: 3
-                        columnSpacing: 8
-                        rowSpacing: 6
-
-                        Label { text: "from" }
-                        SpinBox { id: sbFrom; from: 1; to: 4095; value: 1; editable: true
-                                  Layout.fillWidth: true }
-                        SpinBox { id: sbB; from: 1; to: 2; value: 1 }
-
-                        Label { text: "to" }
-                        SpinBox { id: sbTo; from: 1; to: 4095; value: 4095; editable: true
-                                  Layout.fillWidth: true }
-                        Label { text: "b" }
-
-                        Label { text: "step" }
-                        SpinBox { id: sbStep; from: 1; to: 500; value: 100; editable: true
-                                  Layout.fillWidth: true }
-                        Item {}
+                    // Run / Stop
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 10
+                        Button {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 60
+                            font.pointSize: 16
+                            font.bold: true
+                            text: controller.measuring ? "Pause"
+                                       : (controller.paused ? "Resume" : "Start")
+                            highlighted: true
+                            onClicked: controller.startOrPause(sbFrom.value, sbTo.value,
+                                                               sbStep.value, sbB.value)
+                        }
+                        Button {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 60
+                            font.pointSize: 16
+                            font.bold: true
+                            text: "Stop"
+                            enabled: controller.measuring || controller.paused
+                            onClicked: controller.stop()
+                        }
                     }
-                }
 
-                // Live readings
-                GridLayout {
-                    Layout.fillWidth: true
-                    columns: 2
-                    columnSpacing: 8
-                    rowSpacing: 4
+                    // HV sweep parameters
+                    GroupBox {
+                        Layout.fillWidth: true
+                        title: "HV sweep"
 
-                    Label { text: "Current, V:"; font.bold: true }
-                    Label { text: controller.currentValue.toFixed(4)
-                            font.pointSize: 13; font.bold: true }
+                        GridLayout {
+                            anchors.fill: parent
+                            columns: 3
+                            columnSpacing: 12
+                            rowSpacing: 10
 
-                    Label { text: "Power, mW:"; font.bold: true }
-                    Label { text: controller.powerMW.toFixed(3)
-                            font.pointSize: 13; font.bold: true }
-                }
+                            // header row
+                            Item { Layout.preferredWidth: 42 }
+                            Label { text: "n"; font.bold: true; Layout.fillWidth: true
+                                    horizontalAlignment: Text.AlignHCenter }
+                            Label { text: "b"; font.bold: true
+                                    horizontalAlignment: Text.AlignHCenter }
 
-                Label {
-                    Layout.fillWidth: true
-                    text: controller.hvLabel
-                    font.pointSize: 12
-                    font.bold: true
-                }
+                            Label { text: "from" }
+                            SpinBox { id: sbFrom; from: 1; to: 4095; value: 1
+                                      editable: true; Layout.fillWidth: true }
+                            SpinBox { id: sbB; from: 1; to: 2; value: 1
+                                      Layout.rowSpan: 3; Layout.alignment: Qt.AlignTop }
 
-                CheckBox {
-                    id: laserCheck
-                    text: "laser ON"
-                    font.bold: true
-                    onToggled: controller.setLaser(checked)
-                    Component.onCompleted: checked = controller.laserOn
-                    Connections {
-                        target: controller
-                        function onLaserOnChanged() { laserCheck.checked = controller.laserOn }
+                            Label { text: "to" }
+                            SpinBox { id: sbTo; from: 1; to: 4095; value: 4095
+                                      editable: true; Layout.fillWidth: true }
+
+                            Label { text: "step" }
+                            SpinBox { id: sbStep; from: 1; to: 500; value: 100
+                                      editable: true; Layout.fillWidth: true }
+                        }
                     }
-                }
 
-                Item { Layout.fillHeight: true }  // spacer
+                    // Live readings
+                    GroupBox {
+                        Layout.fillWidth: true
+                        title: "Readings"
 
-                Label {
-                    text: controller.pointCount + " points"
-                    color: "#666"
-                }
-                Button {
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: 56
-                    font.pointSize: 14
-                    font.bold: true
-                    text: "Save data"
-                    onClicked: {
-                        saveDialog.selectedFile =
-                            saveDialog.currentFolder + "/" + controller.suggestedFileName()
-                        saveDialog.open()
+                        GridLayout {
+                            anchors.fill: parent
+                            columns: 2
+                            columnSpacing: 12
+                            rowSpacing: 8
+
+                            Label { text: "Current, V" }
+                            Label { Layout.fillWidth: true
+                                    horizontalAlignment: Text.AlignRight
+                                    text: controller.currentValue.toFixed(4)
+                                    font.pointSize: 14; font.bold: true }
+
+                            Label { text: "Power, mW" }
+                            Label { Layout.fillWidth: true
+                                    horizontalAlignment: Text.AlignRight
+                                    text: controller.powerMW.toFixed(3)
+                                    font.pointSize: 14; font.bold: true }
+
+                            Label { text: "HV"; }
+                            Label { Layout.fillWidth: true
+                                    horizontalAlignment: Text.AlignRight
+                                    text: controller.hvLabel.replace("HV: ", "")
+                                    font.bold: true }
+                        }
+                    }
+
+                    CheckBox {
+                        id: laserCheck
+                        text: "Laser ON"
+                        font.bold: true
+                        onToggled: controller.setLaser(checked)
+                        Component.onCompleted: checked = controller.laserOn
+                        Connections {
+                            target: controller
+                            function onLaserOnChanged() { laserCheck.checked = controller.laserOn }
+                        }
+                    }
+
+                    Item { Layout.fillHeight: true }  // spacer pushes Save to bottom
+
+                    Label {
+                        Layout.fillWidth: true
+                        horizontalAlignment: Text.AlignHCenter
+                        text: controller.pointCount + " points collected"
+                        color: "#888"
+                    }
+                    Button {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 52
+                        font.pointSize: 14
+                        font.bold: true
+                        text: "Save data"
+                        onClicked: {
+                            saveDialog.selectedFile =
+                                saveDialog.currentFolder + "/" + controller.suggestedFileName()
+                            saveDialog.open()
+                        }
                     }
                 }
             }
