@@ -14,6 +14,58 @@ ApplicationWindow {
     minimumHeight: 600
     title: "WM — I-P Characterisation" + (controller.simulated ? "  [SIMULATION]" : "")
 
+    // HV multiplier (b): 1 = ×1, 2 = ×2 — selected via the two big buttons below
+    property int bValue: 1
+
+    // Touch-friendly numeric stepper: label + big − / value / + with auto-repeat.
+    component LabeledStepper: RowLayout {
+        id: stepper
+        property string label: ""
+        property int value: 1
+        property int from: 1
+        property int to: 4095
+        property int step: 1
+        Layout.fillWidth: true
+        spacing: 6
+
+        Label {
+            text: stepper.label
+            Layout.preferredWidth: 50
+            font.bold: true
+        }
+        Button {
+            text: "−"
+            autoRepeat: true
+            Layout.preferredWidth: 52
+            Layout.preferredHeight: 52
+            font.pointSize: 18
+            font.bold: true
+            onClicked: stepper.value = Math.max(stepper.from, stepper.value - stepper.step)
+        }
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.preferredHeight: 52
+            color: "#fafafa"
+            border.color: "#bbbbbb"
+            radius: 4
+            Label {
+                anchors.centerIn: parent
+                text: stepper.value
+                font.pointSize: 16
+                font.bold: true
+            }
+        }
+        Button {
+            text: "+"
+            autoRepeat: true
+            Layout.preferredWidth: 52
+            Layout.preferredHeight: 52
+            font.pointSize: 18
+            font.bold: true
+            onClicked: stepper.value = Math.min(stepper.to, stepper.value + stepper.step)
+        }
+    }
+
     // ── Plot auto-range bookkeeping ──────────────────────────────────────────────
     property real xMin: 0
     property real xMax: 1
@@ -182,8 +234,8 @@ ApplicationWindow {
                             text: controller.measuring ? "Pause"
                                        : (controller.paused ? "Resume" : "Start")
                             highlighted: true
-                            onClicked: controller.startOrPause(sbFrom.value, sbTo.value,
-                                                               sbStep.value, sbB.value)
+                            onClicked: controller.startOrPause(sFrom.value, sTo.value,
+                                                               sStep.value, win.bValue)
                         }
                         Button {
                             Layout.fillWidth: true
@@ -196,37 +248,41 @@ ApplicationWindow {
                         }
                     }
 
-                    // HV sweep parameters
+                    // HV sweep parameters (touch-friendly steppers)
                     GroupBox {
                         Layout.fillWidth: true
-                        title: "HV sweep"
+                        title: "HV sweep (n)"
 
-                        GridLayout {
+                        ColumnLayout {
                             anchors.fill: parent
-                            columns: 3
-                            columnSpacing: 12
-                            rowSpacing: 10
+                            spacing: 10
 
-                            // header row
-                            Item { Layout.preferredWidth: 42 }
-                            Label { text: "n"; font.bold: true; Layout.fillWidth: true
-                                    horizontalAlignment: Text.AlignHCenter }
-                            Label { text: "b"; font.bold: true
-                                    horizontalAlignment: Text.AlignHCenter }
+                            LabeledStepper { id: sFrom; label: "from"; from: 1; to: 4095; step: 25; value: 1 }
+                            LabeledStepper { id: sTo;   label: "to";   from: 1; to: 4095; step: 25; value: 4095 }
+                            LabeledStepper { id: sStep; label: "step"; from: 1; to: 500;  step: 5;  value: 100 }
 
-                            Label { text: "from" }
-                            SpinBox { id: sbFrom; from: 1; to: 4095; value: 1
-                                      editable: true; Layout.fillWidth: true }
-                            SpinBox { id: sbB; from: 1; to: 2; value: 1
-                                      Layout.rowSpan: 3; Layout.alignment: Qt.AlignTop }
-
-                            Label { text: "to" }
-                            SpinBox { id: sbTo; from: 1; to: 4095; value: 4095
-                                      editable: true; Layout.fillWidth: true }
-
-                            Label { text: "step" }
-                            SpinBox { id: sbStep; from: 1; to: 500; value: 100
-                                      editable: true; Layout.fillWidth: true }
+                            RowLayout {
+                                Layout.fillWidth: true
+                                Layout.topMargin: 2
+                                spacing: 6
+                                Label { text: "b"; Layout.preferredWidth: 50; font.bold: true }
+                                Button {
+                                    text: "×1"
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: 52
+                                    font.pointSize: 15; font.bold: true
+                                    highlighted: win.bValue === 1
+                                    onClicked: win.bValue = 1
+                                }
+                                Button {
+                                    text: "×2"
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: 52
+                                    font.pointSize: 15; font.bold: true
+                                    highlighted: win.bValue === 2
+                                    onClicked: win.bValue = 2
+                                }
+                            }
                         }
                     }
 
