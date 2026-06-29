@@ -18,10 +18,10 @@ void Osc::openDevice() {
     int16_t progress_percent = 0;
     handle = ps2000_open_unit_async();
 
-    // Poll until the unit finishes initialising, with a 5-second timeout
+    // Poll until the unit finishes initialising, with a 10-second timeout
     QElapsedTimer timer;
     timer.start();
-    while (progress_percent < 100 && timer.elapsed() < 5000) {
+    while (progress_percent < 100 && timer.elapsed() < 10000) {
         open_value = ps2000_open_unit_progress(&handle, &progress_percent);
         QThread::msleep(1);
     }

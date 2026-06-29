@@ -42,8 +42,8 @@ Native build on RPi OS Bookworm: install `qt6-base-dev`, `libqt6serialport6-dev`
 **10. Save file column header says `Current_V`**
 Once calibration (#1) is applied, rename to `Current_A` and use calibrated values.
 
-**11. Osc shutdown can block up to ~5 s**
-If the app is closed while `Osc::openDevice()` is still polling for the PicoScope (up to 5 s timeout), `osc.wait()` in `WM::~WM()` blocks until that polling finishes. Only affects "close immediately after clicking Connect".
+**11. Osc shutdown can block up to ~10 s**
+If the app is closed while `Osc::openDevice()` is still polling for the PicoScope (up to 10 s timeout), `osc.wait()` in `WM::~WM()` blocks until that polling finishes. Only affects "close immediately after clicking Connect".
 
 **12. `src/wm_ui.py` is a stale artifact**
 Tracked PySide6-generated file from an older 1515×969 layout with different widget names than the current `wm.ui` (e.g. `pushButton_open_com`, separate per-device connect buttons). Not used by the CMake build — safe to delete or regenerate.
