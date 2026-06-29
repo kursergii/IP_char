@@ -25,7 +25,7 @@ class WM : public QMainWindow
     Q_OBJECT
 
 public:
-    explicit WM(QWidget *parent = nullptr);
+    explicit WM(bool simulate = false, QWidget *parent = nullptr);
     ~WM();
 
 signals:
@@ -89,6 +89,10 @@ private:
     void connectOscilloscope();
     void connectPowermeter();
 
+    void applyHV(int n, int b);      // set HV label + drive hardware (or simulate)
+    void applySimHV(int n, int b);   // compute simulated current/power for setpoint n,b
+
+    bool m_sim            = false;   // simulation mode: synthesise data, no hardware
     bool pulser_connected = false;
     bool osc_connected    = false;
     bool pm_connected     = false;

@@ -6,14 +6,21 @@
 #include <QFile>
 #include <QTextStream>
 #include <QDateTime>
+#include <QRandomGenerator>
 #include <algorithm>
 #include <cmath>
 
-WM::WM(QWidget *parent) :
+WM::WM(bool simulate, QWidget *parent) :
     QMainWindow(parent),
     ui(new Ui::WM)
 {
+    m_sim = simulate;
     ui->setupUi(this);
+
+    if (m_sim) {
+        setWindowTitle("WM  [SIMULATION]");
+        qInfo() << "WM: SIMULATION mode — no hardware will be accessed";
+    }
 
     customPlot = ui->customPlot;
     customPlot->addGraph();
@@ -76,6 +83,11 @@ void WM::connects() {
 // ── Device connection ──────────────────────────────────────────────────────────
 
 void WM::connectAll() {
+    if (m_sim) {
+        pulser_connected = osc_connected = pm_connected = true;
+        checkAllConnected();
+        return;
+    }
     if (!pulser_connected) connectPulser();
     if (!osc_connected)    connectOscilloscope();
     if (!pm_connected)     connectPowermeter();
@@ -161,6 +173,7 @@ void WM::refreshPorts() {
 }
 
 void WM::laser_ON() {
+    if (m_sim) return;  // no hardware in simulation
     if (ui->checkBox_laser_on->isChecked())
         emit requestLaserOn();
     else
@@ -189,7 +202,7 @@ void WM::onStartClicked() {
         ui->pushButton_start->setText("Resume");
     } else {
         // Resume from pause
-        measureTimer.start(1000);
+        measureTimer.start(m_sim ? 250 : 1000);
         m_paused = false;
         ui->pushButton_start->setText("Pause");
     }
@@ -212,21 +225,21 @@ void WM::startMeasurement() {
     clearPlotData();
 
     sweep_n = n_from;
-    emit requestSetHV(sweep_n, ui->spinBox_HV_b->value());
-    ui->label_hv->setText(QString("HV: n=%1, b=%2").arg(sweep_n).arg(ui->spinBox_HV_b->value()));
-    emit requestLaserOn();
+    applyHV(sweep_n, ui->spinBox_HV_b->value());
+    if (!m_sim) emit requestLaserOn();
     ui->checkBox_laser_on->setChecked(true);
     ui->pushButton_start->setText("Pause");
     ui->pushButton_stop->setEnabled(true);
 
-    // First timer fire is the first measurement (1 s settling time for the laser)
-    measureTimer.start(1000);
+    // First timer fire is the first measurement (1 s settling time for the laser;
+    // faster in simulation since there is nothing to settle)
+    measureTimer.start(m_sim ? 250 : 1000);
 }
 
 void WM::stopMeasurement() {
     measureTimer.stop();
     m_paused = false;
-    emit requestLaserOff();
+    if (!m_sim) emit requestLaserOff();
     ui->checkBox_laser_on->setChecked(false);
     ui->pushButton_start->setText("Start");
     ui->pushButton_stop->setEnabled(false);
@@ -269,16 +282,41 @@ void WM::onMeasurementStep() {
     if (sweep_n > ui->spinBox_HV_n_to->value()) {
         measureTimer.stop();
         m_paused = false;
-        emit requestLaserOff();
+        if (!m_sim) emit requestLaserOff();
         ui->checkBox_laser_on->setChecked(false);
         ui->pushButton_start->setText("Start");
         ui->pushButton_stop->setEnabled(false);
         ui->label_hv->setText("HV: —");
         qInfo() << "Measurement complete," << DATA[0].size() << "points";
     } else {
-        emit requestSetHV(sweep_n, ui->spinBox_HV_b->value());
-        ui->label_hv->setText(QString("HV: n=%1, b=%2").arg(sweep_n).arg(ui->spinBox_HV_b->value()));
+        applyHV(sweep_n, ui->spinBox_HV_b->value());
     }
+}
+
+// ── HV setpoint: drive hardware, or synthesise data in simulation mode ───────────
+
+void WM::applyHV(int n, int b) {
+    ui->label_hv->setText(QString("HV: n=%1, b=%2").arg(n).arg(b));
+    if (m_sim) applySimHV(n, b);
+    else       emit requestSetHV(n, b);
+}
+
+void WM::applySimHV(int n, int b) {
+    // Synthetic laser-diode model for UI testing without hardware.
+    // Drive ∝ HV setpoint; optical power follows an L-I curve (threshold + slope).
+    auto noise = [](double frac) {
+        return 1.0 + frac * (QRandomGenerator::global()->generateDouble() - 0.5);
+    };
+
+    double drive     = (n / 4096.0) * b;             // ~0 .. 2
+    double current_V = 0.05 * drive * noise(0.02);   // osc "current" reading, volts
+
+    const double I_th = 0.012;                        // lasing threshold (same V units)
+    double power_W = current_V > I_th ? 0.8 * (current_V - I_th) : 0.0;
+    power_W = std::max(0.0, power_W * noise(0.04));
+
+    read_values(current_V);   // updates latest_current + label
+    read_power(power_W);       // updates latest_power_W + label
 }
 
 // ── Data export ────────────────────────────────────────────────────────────────
