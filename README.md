@@ -1,6 +1,6 @@
 # IP_char — Laser Diode I-P Characterisation Tool
 
-A Qt6 desktop application for measuring and plotting laser diode **current vs. optical power (I-P)** characteristics. It controls a pulsed laser driver over serial, reads laser current via a PicoScope 2000 USB oscilloscope, and measures optical power with a Thorlabs PM100A power meter.
+A Qt6 **QML/Quick** application for measuring and plotting laser diode **current vs. optical power (I-P)** characteristics. It controls a pulsed laser driver over serial, reads laser current via a PicoScope 2000 USB oscilloscope, and measures optical power with a Thorlabs PM100A power meter. The I-P curve is plotted live with **QtGraphs**.
 
 ---
 
@@ -39,15 +39,16 @@ A Qt6 desktop application for measuring and plotting laser diode **current vs. o
 
 | Library | Version | Notes |
 |---------|---------|-------|
-| Qt 6 | ≥ 6.2 | Widgets, SerialPort, PrintSupport |
+| Qt 6 | ≥ 6.5 | Core, Gui, Qml, Quick, QuickControls2, SerialPort |
+| QtGraphs | ≥ 6.8 | 2D scatter plot (runtime QML plugin) |
 | libps2000 | — | PicoScope 2000 driver, installed at `/opt/picoscope/` |
-| QCustomPlot | 2.1.1 | Bundled in source |
 | CMake | ≥ 3.16 | |
 | GCC / Clang | C++17 | |
 
 **Install Qt6 on Fedora:**
 ```bash
-sudo dnf install qt6-qtbase-devel qt6-qtserialport-devel
+sudo dnf install qt6-qtbase-devel qt6-qtdeclarative-devel \
+    qt6-qtquickcontrols2-devel qt6-qtserialport-devel qt6-qtgraphs
 ```
 
 **Install libps2000** from [picotech.com/downloads/linux](https://www.picotech.com/downloads/linux) into `/opt/picoscope/`.
@@ -81,7 +82,8 @@ cmake --install build   # copies binary to install/bin/, docs to install/share/d
 
 ```bash
 # On the Pi (Raspberry Pi OS Bookworm 64-bit):
-sudo apt install cmake g++ qt6-base-dev libqt6serialport6-dev
+sudo apt install cmake g++ qt6-base-dev qt6-declarative-dev \
+    libqt6serialport6-dev qml6-module-qtquick-controls qml6-module-qtgraphs
 
 # Install libps2000 for ARM from PicoTech repo
 curl -L "https://labs.picotech.com/debian/picotech.list" | sudo tee /etc/apt/sources.list.d/picotech.list
@@ -98,13 +100,12 @@ sudo apt update && sudo apt install libps2000
 ./bin/WM
 ```
 
-Connect devices in any order using the top bar buttons:
+Connect all devices at once from the top bar:
 
-1. Select the pulser serial port from the dropdown (use **↺** to refresh if the device was just plugged in), then click **connect pulser** — sets default pulse parameters, laser OFF
-2. **connect osc** — opens PicoScope 2000, configures trigger
-3. **connect PM** — opens `/dev/usbtmc0`, configures PM100A
+1. Select the pulser serial port from the dropdown (use **↺** to refresh if the device was just plugged in)
+2. Click **Connect** — opens the pulser (sets default pulse parameters, laser OFF), the PicoScope 2000 (configures trigger), and the PM100A on `/dev/usbtmc0` in one action
 
-The **Start** button enables automatically once all three devices are connected.
+Each device reports success independently; a warning dialog appears for any that fail (retry **Connect** to reattempt only the not-yet-connected ones). The control panel and **Start** button enable automatically once all three are connected.
 
 ---
 
@@ -136,14 +137,13 @@ The **laser ON** checkbox controls the laser driver independently of the sweep �
 
 ## Saving data
 
-Click **Save data** after a sweep. The exported `.txt` file is tab-separated with a comment header:
+Click **Save data** after a sweep. The file dialog pre-fills a timestamped name like `IV-2026-06-29_143201.csv`. The exported CSV has a comment header:
 
 ```
-# IP characterisation — 2026-05-17T14:32:01
-# HV n_from=100 n_step=50 n_to=2000 b=1
+# IP characterisation — 2026-06-29T14:32:01
 # Points: 39
-HV_n    Current_V    Power_mW
-100     0.00443      1.234
+Current_V,Power_mW
+0.00443,1.234
 ...
 ```
 
@@ -153,26 +153,26 @@ HV_n    Current_V    Power_mW
 
 ```
 src/
-  main.cpp            — Qt entry point
-  wm.h / wm.cpp       — main window: UI logic, sweep control, device coordination
-  oscilloscope.h/cpp  — Osc (QThread): triggered peak acquisition via PicoScope
-  powermeter.h/cpp    — Powermeter (QThread): MEAS:POW? loop via PM100A USBTMC
-  pulser.h/cpp        — Pulser (QObject, pulserThread): serial control of laser driver
-  wm.ui               — Qt Designer layout
-  qcustomplot.h/cpp   — QCustomPlot 2.1.1 (bundled)
+  main.cpp                — Qt entry point (QQmlApplicationEngine, Fusion style)
+  Main.qml                — QML UI: QtGraphs plot, controls, dialogs
+  controller.h/cpp        — Controller (QObject): QML↔backend bridge, sweep control,
+                            device coordination; exposes Q_PROPERTY / Q_INVOKABLE
+  oscilloscope.h/cpp      — Osc (QThread): triggered peak acquisition via PicoScope
+  powermeter.h/cpp        — Powermeter (QThread): MEAS:POW? loop via PM100A USBTMC
+  pulser.h/cpp            — Pulser (QObject, pulserThread): serial control of laser driver
   CMakeLists.txt
   CMakePresets.json
 bin/
-  WM                  — compiled binary
-build/                — CMake build artifacts
-install/              — cmake --install output
+  WM                      — compiled binary
+build/                    — CMake build artifacts
+install/                  — cmake --install output
 ```
 
 ### Threading model
 
 | Component | Thread | Communication |
 |-----------|--------|---------------|
-| `WM` (UI) | Main thread | Qt signals/slots |
-| `Osc` | `osc` thread | emits `sendData(current_V)` → `WM::read_values()` |
-| `Powermeter` | `pm` thread | emits `sendPower(W)` → `WM::read_power()` |
-| `Pulser` | `pulserThread` | receives queued signals from WM; never blocks the UI |
+| `Controller` + QML UI | Main thread | `Q_PROPERTY`/signals to QML; `pointAdded(x,y)` streams plot data |
+| `Osc` | `osc` thread | emits `sendData(current_V)` → `Controller::read_values()` |
+| `Powermeter` | `pm` thread | emits `sendPower(W)` → `Controller::read_power()` |
+| `Pulser` | `pulserThread` | receives queued signals from Controller; never blocks the UI |

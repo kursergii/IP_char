@@ -34,16 +34,12 @@ Before starting the software, connect all three instruments:
 
 ### Connect devices
 
-Use the buttons in the top bar, in any order:
-
 | Control | Action |
 |---------|--------|
 | Port dropdown + **↺** | Select the serial port for the pulser. Click **↺** to refresh the list if the device was just plugged in. |
-| **connect pulser** | Opens the serial port. The pulser is configured to 150 ns pulses at 10 kHz and the laser is turned OFF. |
-| **connect osc** | Opens the PicoScope 2000 and configures triggered acquisition on Channel A. |
-| **connect PM** | Opens the PM100A and enables auto-ranging. |
+| **Connect** | Opens all three instruments in one action: the pulser (configured to 150 ns pulses at 10 kHz, laser OFF), the PicoScope 2000 (triggered acquisition on Channel A), and the PM100A (auto-ranging). |
 
-The **Start** button in the right-hand control panel becomes available once all three devices are connected.
+Each device reports back independently — a warning dialog appears for any that fails to open, and pressing **Connect** again retries only the ones not yet connected. The right-hand control panel and the **Start** button become available once all three are connected.
 
 ---
 
@@ -90,19 +86,17 @@ The **laser ON** checkbox controls the laser independently — useful for manual
 
 ## Saving data
 
-Click **Save data** at any point during or after a sweep. A file dialog opens to choose the location. The output is a tab-separated text file:
+Click **Save data** at any point during or after a sweep. A file dialog opens with a timestamped name already filled in (e.g. `IV-2026-06-29_143201.csv`). The output is a CSV file:
 
 ```
-# IP characterisation — 2026-05-17T14:32:01
-# HV n_from=100 n_step=50 n_to=2000 b=1
+# IP characterisation — 2026-06-29T14:32:01
 # Points: 39
-HV_n    Current_V    Power_mW
-100     0.00443      1.234
-150     0.00512      2.018
+Current_V,Power_mW
+0.00443,1.234
+0.00512,2.018
 ...
 ```
 
-- **HV_n** — the DAC value at each step
 - **Current_V** — oscilloscope voltage (divide by the current-sense gain to get amps)
 - **Power_mW** — optical power from the PM100A in milliwatts
 
@@ -117,4 +111,4 @@ HV_n    Current_V    Power_mW
 | "Failed to connect" (PM100A) | Missing udev rule or not plugged in | Run the permission command above and replug |
 | Power reads 0 or flat | Laser not firing, or wrong wavelength set | Check laser ON state; verify wavelength correction in source |
 | Current reads 0 | Trigger not catching pulses | Check Ch-A wiring; verify laser is actually pulsing |
-| Start button stays disabled | One or more devices not connected | All three "connected" buttons must be active |
+| Start button stays disabled | One or more devices not connected | The **Connect** button must read "Connected" (all three opened successfully) |
