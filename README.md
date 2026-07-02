@@ -80,16 +80,52 @@ cmake --install build   # copies binary to install/bin/, docs to install/share/d
 
 ### Build for Raspberry Pi (native)
 
-```bash
-# On the Pi (Raspberry Pi OS Bookworm 64-bit):
-sudo apt install cmake g++ qt6-base-dev qt6-declarative-dev \
-    libqt6serialport6-dev qml6-module-qtquick-controls qml6-module-qtgraphs
+> **Qt ≥ 6.8 is required** because the plot uses **QtGraphs 2D** (`GraphsView`,
+> `ScatterSeries`), which did not exist before 6.8. Raspberry Pi OS *Bookworm*
+> ships Qt 6.4 and **will not work**. Use Raspberry Pi OS **Trixie (Debian 13)**
+> or newer, which ships Qt 6.8. Check with `apt policy qt6-base-dev` — the
+> candidate must be `6.8` or higher.
 
-# Install libps2000 for ARM from PicoTech repo
+64-bit Raspberry Pi OS (Trixie) — install toolchain, Qt dev packages, and the
+QML runtime modules the app imports:
+
+```bash
+# Build toolchain
+sudo apt install cmake g++ ninja-build
+
+# Qt 6 development packages (compile-time)
+sudo apt install qt6-base-dev qt6-declarative-dev qt6-graphs-dev \
+    libqt6serialport6-dev
+
+# QML runtime modules the app imports at run time
+sudo apt install \
+    qml6-module-qtquick \
+    qml6-module-qtquick-controls \
+    qml6-module-qtquick-layouts \
+    qml6-module-qtquick-dialogs \
+    qml6-module-qtcore \
+    qml6-module-qtgraphs
+```
+
+Install the PicoScope driver for ARM from the PicoTech APT repo:
+
+```bash
 curl -L "https://labs.picotech.com/debian/picotech.list" | sudo tee /etc/apt/sources.list.d/picotech.list
 sudo apt update && sudo apt install libps2000
+```
 
-# Then build as above
+> libps2000 from the apt repo installs to `/usr/lib` and `/usr/include`, not
+> `/opt/picoscope`. If so, point CMake at it by editing the two paths in
+> `src/CMakeLists.txt` (the `libps2000.so` link line and the include dir), or
+> symlink them into `/opt/picoscope/`.
+
+Then build and run:
+
+```bash
+git clone <repo> && cd IP_char
+cmake -S src -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j$(nproc)
+./bin/WM          # or:  ./bin/WM -sim   to test without hardware
 ```
 
 ---

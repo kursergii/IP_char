@@ -204,13 +204,7 @@ void Controller::startMeasurement(int nFrom, int nTo, int nStep, int b)
 
 void Controller::stop()
 {
-    measureTimer.stop();
-    setMeasuring(false);
-    setPaused(false);
-    if (!m_sim) emit requestLaserOff();
-    setLaserState(false);
-    m_hvLabel = "HV: —";
-    emit hvLabelChanged();
+    finishSweep();  // same teardown as a completed sweep
     qInfo() << "Measurement stopped," << pointCount() << "points collected";
 }
 
@@ -275,13 +269,8 @@ void Controller::applySimHV(int n, int b)
     double power_W = current_V > I_th ? 0.8 * (current_V - I_th) : 0.0;
     power_W = std::max(0.0, power_W * noise(0.04));
 
-    latest_current = current_V;
-    m_currentValue = current_V;
-    emit currentChanged();
-
-    latest_power_W = power_W;
-    m_powerMW = power_W * 1000.0;
-    emit powerChanged();
+    read_values(current_V);   // updates latest_current + m_currentValue, emits currentChanged
+    read_power(power_W);       // updates latest_power_W + m_powerMW, emits powerChanged
 }
 
 void Controller::clearData()
