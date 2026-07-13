@@ -77,8 +77,9 @@ bool Powermeter::openDevice()
         return false;
     }
 
-    // Take the interface away from the kernel usbtmc driver (which fails on the
-    // PM101A) so we can drive the bulk endpoints ourselves.
+    // Take the interface away from the kernel usbtmc driver if it grabbed it
+    // (it should be blacklisted — see build.sh deps — since it wedges the PM101A).
+    // With usbtmc blacklisted there is nothing to detach and the device is clean.
     if (libusb_kernel_driver_active(handle, iface) == 1) {
         if (libusb_detach_kernel_driver(handle, iface) == 0)
             kernel_detached = true;

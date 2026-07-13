@@ -24,7 +24,18 @@ setup_deps() {
     echo 'SUBSYSTEM=="usb", ATTRS{idVendor}=="1313", MODE="0666"' \
         | sudo tee /etc/udev/rules.d/99-thorlabs-libusb.rules
     sudo udevadm control --reload-rules && sudo udevadm trigger
-    echo "==> Setup done. (libps2000 PicoScope driver must be installed separately.)"
+
+    # The app talks to the meter via libusb. The kernel usbtmc driver both
+    # fails on the PM101A and wedges it on probe, so stop it loading at all.
+    # 'blacklist' alone doesn't block hotplug auto-load; 'install ... /bin/true'
+    # does. Unloading it now also un-wedges an already-attached meter.
+    echo "==> Blocking kernel usbtmc driver (app uses libusb directly)"
+    printf 'blacklist usbtmc\ninstall usbtmc /bin/true\n' \
+        | sudo tee /etc/modprobe.d/blacklist-usbtmc.conf
+    sudo modprobe -r usbtmc 2>/dev/null || true
+
+    echo "==> Setup done. Power-cycle the meter once, then build."
+    echo "    (libps2000 PicoScope driver must be installed separately.)"
 }
 
 if [ "${1:-}" = "deps" ] || [ "${1:-}" = "setup" ]; then
