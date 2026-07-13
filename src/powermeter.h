@@ -39,6 +39,7 @@ signals:
 
 private:
     bool openDevice();
+    bool findAndOpen();   // scan for the meter, open handle, resolve endpoints
     void running();
     void cleanup();
 

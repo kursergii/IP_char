@@ -10,16 +10,11 @@ void Powermeter::setAveraging(int count) { averaging_count = count; } // call be
 
 // ── Device open: find the Thorlabs USBTMC meter, claim it, configure ─────────────
 
-bool Powermeter::openDevice()
+// Scan for a device with our vendor id exposing a USBTMC interface
+// (bInterfaceClass 0xFE = Application Specific, bInterfaceSubClass 3 = TMC),
+// open a handle to it and resolve the bulk endpoints. ctx must be initialised.
+bool Powermeter::findAndOpen()
 {
-    if (libusb_init(&ctx) != 0) {
-        qWarning() << "Powermeter: libusb_init failed";
-        emit connectionResult(false);
-        return false;
-    }
-
-    // Find a device with our vendor id that exposes a USBTMC interface
-    // (bInterfaceClass 0xFE = Application Specific, bInterfaceSubClass 3 = TMC).
     libusb_device **list = nullptr;
     ssize_t cnt = libusb_get_device_list(ctx, &list);
     libusb_device *target = nullptr;
@@ -64,7 +59,6 @@ bool Powermeter::openDevice()
         qWarning() << "Powermeter: no Thorlabs USBTMC device found (vendor"
                    << Qt::hex << vendor_id << ")";
         if (list) libusb_free_device_list(list, 1);
-        emit connectionResult(false);
         return false;
     }
 
@@ -73,8 +67,41 @@ bool Powermeter::openDevice()
     if (r != 0) {
         qWarning() << "Powermeter: libusb_open failed:" << libusb_error_name(r)
                    << "(permission? add udev rule for vendor 1313)";
+        handle = nullptr;
+        return false;
+    }
+    return true;
+}
+
+bool Powermeter::openDevice()
+{
+    if (libusb_init(&ctx) != 0) {
+        qWarning() << "Powermeter: libusb_init failed";
         emit connectionResult(false);
         return false;
+    }
+
+    if (!findAndOpen()) {
+        emit connectionResult(false);
+        return false;
+    }
+
+    // Reset the device to clear any stuck USBTMC state — this is the programmatic
+    // equivalent of physically unplugging/replugging the meter. The PM101A can get
+    // wedged (e.g. by an earlier kernel usbtmc probe) and that state survives a
+    // reboot because the USB port stays powered. A reset re-enumerates it: the old
+    // handle then becomes stale (LIBUSB_ERROR_NOT_FOUND), so reopen the fresh one.
+    int rr = libusb_reset_device(handle);
+    if (rr == LIBUSB_ERROR_NOT_FOUND) {
+        libusb_close(handle);
+        handle = nullptr;
+        QThread::msleep(1500);          // wait for re-enumeration to settle
+        if (!findAndOpen()) {
+            emit connectionResult(false);
+            return false;
+        }
+    } else if (rr == 0) {
+        QThread::msleep(200);           // brief settle after in-place reset
     }
 
     // Take the interface away from the kernel usbtmc driver if it grabbed it
@@ -86,6 +113,7 @@ bool Powermeter::openDevice()
         else
             qWarning() << "Powermeter: could not detach kernel usbtmc driver";
     }
+
     if (libusb_claim_interface(handle, iface) != 0) {
         qWarning() << "Powermeter: libusb_claim_interface failed";
         emit connectionResult(false);

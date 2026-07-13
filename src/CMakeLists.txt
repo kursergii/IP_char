@@ -15,6 +15,20 @@ find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets SerialPort)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(LIBUSB REQUIRED libusb-1.0)
 
+# libps2000 (PicoScope) — installs to /opt/picoscope on the dev box but to a
+# system path (/usr/lib, /usr/lib/<triplet>) from the PicoTech apt repo on the Pi.
+find_library(PS2000_LIB NAMES ps2000 libps2000
+    PATHS /opt/picoscope/lib /usr/lib /usr/local/lib
+    PATH_SUFFIXES aarch64-linux-gnu arm-linux-gnueabihf x86_64-linux-gnu)
+find_path(PS2000_INC NAMES ps2000.h libps2000/ps2000.h
+    PATHS /opt/picoscope/include /opt/picoscope/include/libps2000
+          /usr/include /usr/include/libps2000)
+if(NOT PS2000_LIB OR NOT PS2000_INC)
+    message(FATAL_ERROR "libps2000 not found. Install the PicoScope driver "
+        "(PicoTech apt repo, or /opt/picoscope). Got LIB='${PS2000_LIB}' INC='${PS2000_INC}'")
+endif()
+message(STATUS "libps2000: ${PS2000_LIB}  (headers: ${PS2000_INC})")
+
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/../bin)
 
 add_executable(WM
@@ -38,13 +52,13 @@ target_link_libraries(WM PRIVATE
     Qt6::Gui
     Qt6::Widgets
     Qt6::SerialPort
-    /opt/picoscope/lib/libps2000.so
+    ${PS2000_LIB}
     ${LIBUSB_LIBRARIES}
 )
 
 target_include_directories(WM PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
-    /opt/picoscope/include/libps2000
+    ${PS2000_INC}
     ${LIBUSB_INCLUDE_DIRS}
 )
 
