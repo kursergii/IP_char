@@ -7,10 +7,13 @@ if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type")
 endif()
 set(CMAKE_AUTOMOC ON)
-set(CMAKE_AUTOUIC ON)
-set(CMAKE_AUTORCC ON)
 
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets SerialPort PrintSupport)
+find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets SerialPort)
+
+# libusb-1.0 — power meter talks USBTMC directly over libusb (not the kernel
+# usbtmc driver, which fails on the PM101A).  On the Pi: apt install libusb-1.0-0-dev
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(LIBUSB REQUIRED libusb-1.0)
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/../bin)
 
@@ -18,15 +21,16 @@ add_executable(WM
     main.cpp
     wm.cpp
     wm.h
-    wm.ui
+    plotwidget.cpp
+    plotwidget.h
+    stepper.cpp
+    stepper.h
     oscilloscope.cpp
     oscilloscope.h
     powermeter.cpp
     powermeter.h
     pulser.cpp
     pulser.h
-    qcustomplot.cpp
-    qcustomplot.h
 )
 
 target_link_libraries(WM PRIVATE
@@ -34,13 +38,14 @@ target_link_libraries(WM PRIVATE
     Qt6::Gui
     Qt6::Widgets
     Qt6::SerialPort
-    Qt6::PrintSupport
     /opt/picoscope/lib/libps2000.so
+    ${LIBUSB_LIBRARIES}
 )
 
 target_include_directories(WM PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
     /opt/picoscope/include/libps2000
+    ${LIBUSB_INCLUDE_DIRS}
 )
 
 install(TARGETS WM DESTINATION bin)

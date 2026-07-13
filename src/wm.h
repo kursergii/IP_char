@@ -4,22 +4,23 @@
 #include <QMainWindow>
 #include <QTimer>
 #include <QThread>
-#include "qcustomplot.h"
+#include <QVector>
 
 #include "oscilloscope.h"
 #include "powermeter.h"
 #include "pulser.h"
 
-namespace Ui { class WM; }
+class PlotWidget;
+class Stepper;
+class QComboBox;
+class QPushButton;
+class QLabel;
+class QCheckBox;
+class QFrame;
 
-// Main window. Coordinates three hardware devices:
-//   Pulser    — serial, runs in pulserThread via moveToThread
-//   Osc       — PicoScope acquisition, runs in its own QThread
-//   Powermeter — PM100A via USBTMC, runs in its own QThread
-//
-// The Start button runs a timed HV sweep: every 1 s the timer fires,
-// reads the latest current (from Osc) and power (from Powermeter),
-// plots the point, then steps the HV to the next value.
+// Main window. Same layout as the QML version, built with Qt Widgets and a
+// lightweight PlotWidget (no QCustomPlot, no QtGraphs). Coordinates three
+// devices (Pulser / Osc / Powermeter) and runs a timed HV sweep.
 class WM : public QMainWindow
 {
     Q_OBJECT
@@ -29,26 +30,22 @@ public:
     ~WM();
 
 signals:
-    // Forwarded to Pulser via queued connection (runs in pulserThread)
     void requestOpen(const QString &port);
     void requestLaserOn();
     void requestLaserOff();
     void requestSetHV(int n, int b);
 
 public slots:
-    // Device connection
     void connectAll();
     void onPulserConnected(bool success);
     void onOscConnected(bool success);
     void onPmConnected(bool success);
 
-    // Measurement control
-    void onStartClicked();     // toggles Start → Pause → Resume
+    void onStartClicked();
     void startMeasurement();
     void stopMeasurement();
-    void onMeasurementStep();  // called by measureTimer every 1 s
+    void onMeasurementStep();
 
-    // Data receivers (called via queued connections from worker threads)
     void read_values(double current_V);
     void read_power(double watts);
 
@@ -58,46 +55,63 @@ public slots:
     void refreshPorts();
 
 private:
-    QCustomPlot *customPlot;
+    void buildUi();
+    void checkAllConnected();
+    void clearPlotData();
+    void connectPulser();
+    void connectOscilloscope();
+    void connectPowermeter();
+    void applyHV(int n, int b);      // set HV label + drive hardware (or simulate)
+    void applySimHV(int n, int b);
+    void updateControls();           // Start/Stop text + enabled state
+    void setPill(QLabel *pill, bool on);
+    void setBValue(int b);
 
-    // Sweep data: DATA[0] = current (V), DATA[1] = power (mW)
-    // Indices match the measurement sequence — point i was taken at
-    // n = spinBox_HV_n_from + i × spinBox_HV_n_step.
-    QVector<QVector<double>> DATA;
+    // ── UI ──────────────────────────────────────────────────────────────────
+    PlotWidget  *plot        = nullptr;
+    QComboBox   *portCombo   = nullptr;
+    QPushButton *connectBtn  = nullptr;
+    QPushButton *refreshBtn  = nullptr;
+    QPushButton *clearBtn    = nullptr;
+    QLabel      *pillPulser  = nullptr;
+    QLabel      *pillOsc     = nullptr;
+    QLabel      *pillPm      = nullptr;
 
+    QFrame      *panel       = nullptr;
+    QPushButton *startBtn    = nullptr;
+    QPushButton *stopBtn     = nullptr;
+    Stepper     *sFrom       = nullptr;
+    Stepper     *sTo         = nullptr;
+    Stepper     *sStep       = nullptr;
+    QPushButton *bBtn1       = nullptr;
+    QPushButton *bBtn2       = nullptr;
+    QLabel      *currentVal  = nullptr;
+    QLabel      *powerVal    = nullptr;
+    QLabel      *hvVal       = nullptr;
+    QCheckBox   *laserCheck  = nullptr;
+    QLabel      *pointsLabel = nullptr;
+    QPushButton *saveBtn     = nullptr;
+
+    // ── Backend ─────────────────────────────────────────────────────────────
     Osc        osc;
     Powermeter pm;
     Pulser     pulser;
     QThread    pulserThread;
     QTimer     measureTimer;
 
-    int    sweep_n   = 0;      // current HV DAC value during a sweep
-    bool   m_paused  = false;
+    QVector<QVector<double>> DATA;   // DATA[0]=current(V), DATA[1]=power(mW)
 
-    // Latest snapshots from background threads (written on main thread via queued slots)
-    double latest_current = 0; // volts from oscilloscope (multiply by 1/R_sense for amps)
-    double latest_power_W = 0; // watts from PM100A
+    int    sweep_n = 0;
+    bool   m_paused = false;
+    int    m_bValue = 1;
 
-    // Running axis bounds — updated incrementally to avoid O(n) scan per point
-    double xMin = 0, xMax = 0;
-    double yMin = 0, yMax = 0;
+    double latest_current = 0;
+    double latest_power_W = 0;
 
-    void connects();
-    void checkAllConnected();
-    void clearPlotData();
-    void connectPulser();
-    void connectOscilloscope();
-    void connectPowermeter();
-
-    void applyHV(int n, int b);      // set HV label + drive hardware (or simulate)
-    void applySimHV(int n, int b);   // compute simulated current/power for setpoint n,b
-
-    bool m_sim            = false;   // simulation mode: synthesise data, no hardware
+    bool m_sim            = false;
     bool pulser_connected = false;
     bool osc_connected    = false;
     bool pm_connected     = false;
-
-    Ui::WM *ui;
 };
 
 #endif // WM_H
