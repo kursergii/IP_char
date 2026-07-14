@@ -81,27 +81,13 @@ bool Powermeter::openDevice()
         return false;
     }
 
+    // NOTE: the PM101A can get stuck in a wedged USBTMC state that only a real
+    // VBUS power-cycle clears (a USB bus reset / libusb_reset_device does NOT).
+    // That is handled outside the app by power-cycling the meter's hub port with
+    // uhubctl before launch (see run.sh) — so here we just open and talk to it.
     if (!findAndOpen()) {
         emit connectionResult(false);
         return false;
-    }
-
-    // Reset the device to clear any stuck USBTMC state — this is the programmatic
-    // equivalent of physically unplugging/replugging the meter. The PM101A can get
-    // wedged (e.g. by an earlier kernel usbtmc probe) and that state survives a
-    // reboot because the USB port stays powered. A reset re-enumerates it: the old
-    // handle then becomes stale (LIBUSB_ERROR_NOT_FOUND), so reopen the fresh one.
-    int rr = libusb_reset_device(handle);
-    if (rr == LIBUSB_ERROR_NOT_FOUND) {
-        libusb_close(handle);
-        handle = nullptr;
-        QThread::msleep(1500);          // wait for re-enumeration to settle
-        if (!findAndOpen()) {
-            emit connectionResult(false);
-            return false;
-        }
-    } else if (rr == 0) {
-        QThread::msleep(200);           // brief settle after in-place reset
     }
 
     // Take the interface away from the kernel usbtmc driver if it grabbed it

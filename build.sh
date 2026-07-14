@@ -18,7 +18,7 @@ cd "$(dirname "$0")"
 setup_deps() {
     echo "==> Installing build dependencies (apt)"
     sudo apt install -y cmake g++ qt6-base-dev libqt6serialport6-dev \
-        qt6-wayland libusb-1.0-0-dev
+        qt6-wayland libusb-1.0-0-dev uhubctl
 
     echo "==> Installing udev rule for Thorlabs power meter (vendor 1313)"
     echo 'SUBSYSTEM=="usb", ATTRS{idVendor}=="1313", MODE="0666"' \
@@ -34,7 +34,15 @@ setup_deps() {
         | sudo tee /etc/modprobe.d/blacklist-usbtmc.conf
     sudo modprobe -r usbtmc 2>/dev/null || true
 
-    echo "==> Setup done. Power-cycle the meter once, then build."
+    # run.sh power-cycles the meter's hub port (uhubctl) to un-wedge the PM101A.
+    # Allow it without a password so the kiosk launcher needs no interaction.
+    echo "==> Granting passwordless sudo for uhubctl (used by run.sh)"
+    UHUBCTL=$(command -v uhubctl || echo /usr/sbin/uhubctl)
+    echo "$USER ALL=(root) NOPASSWD: $UHUBCTL" \
+        | sudo tee /etc/sudoers.d/uhubctl-nopasswd
+    sudo chmod 440 /etc/sudoers.d/uhubctl-nopasswd
+
+    echo "==> Setup done. Build with ./build.sh, then launch with ./run.sh"
     echo "    (libps2000 PicoScope driver must be installed separately.)"
 }
 
