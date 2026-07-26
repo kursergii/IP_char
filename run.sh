@@ -5,32 +5,46 @@
 # The Thorlabs PM101A can power up in a wedged USBTMC state that only a real
 # VBUS power-cycle clears (a USB bus reset does not). This script finds the
 # meter's hub port and power-cycles just that port with uhubctl before starting
-# WM, so Connect works without any manual unplug/replug.
+# WM, so Connect works without any manual unplug/replug. Once un-wedged the app
+# talks to the meter fine and does not re-wedge it.
 #
-# Requires: uhubctl, and passwordless sudo for it (see build.sh deps).
+# Needs: uhubctl + passwordless sudo for it (set up by ./build.sh deps).
 # Any arguments are passed through to WM (e.g. ./run.sh -sim).
 #
 set -e
 cd "$(dirname "$0")"
 
-METER_VIDPID="1313:8076"   # Thorlabs PM101A
+METER="1313:8076"   # Thorlabs PM101A vendor:product
 
-# Auto-detect the meter's hub location + port from uhubctl (robust to which
-# physical port it's plugged into). Falls back to skipping if not found.
-info=$(sudo uhubctl 2>/dev/null \
-    | awk -v id="$METER_VIDPID" '
-        /Current status for hub/ { hub=$5 }
-        index($0, id)            { gsub(/:/,"",$2); print hub, $2; exit }')
+power_cycle_meter() {
+    if ! command -v uhubctl >/dev/null; then
+        echo "run.sh: uhubctl not installed  ->  sudo apt install uhubctl"
+        return 1
+    fi
+    if ! sudo -n true 2>/dev/null; then
+        echo "run.sh: passwordless sudo not set. Run './build.sh deps', or:"
+        echo "  echo \"\$USER ALL=(root) NOPASSWD: \$(command -v uhubctl)\" | sudo tee /etc/sudoers.d/uhubctl-nopasswd"
+        return 1
+    fi
 
-if [ -n "$info" ]; then
+    # Auto-detect the meter's hub location + port (robust to which port it's in).
+    local info hub port
+    info=$(sudo -n uhubctl 2>/dev/null | awk -v id="$METER" '
+        /Current status for hub/ { h=$5 }
+        index($0, id)            { gsub(/:/,"",$2); print h, $2; exit }')
+    if [ -z "$info" ]; then
+        echo "run.sh: meter ($METER) not found by uhubctl (hub without per-port power?)"
+        return 1
+    fi
     hub=${info% *}; port=${info#* }
-    echo "==> Power-cycling power meter (hub $hub port $port) to clear wedged state"
-    sudo uhubctl -a cycle -l "$hub" -p "$port" -d 2 || \
-        echo "    (uhubctl failed — check it's installed and passwordless sudo is set)"
-    sleep 3
-else
-    echo "==> Power meter ($METER_VIDPID) not found by uhubctl — launching anyway"
-fi
 
-echo "==> Starting WM"
+    echo "run.sh: power-cycling meter (hub $hub port $port) to clear wedged state"
+    sudo -n uhubctl -a cycle -l "$hub" -p "$port" -d 2
+    sleep 3
+    echo "run.sh: meter power-cycled"
+}
+
+power_cycle_meter || echo "run.sh: WARNING — meter not power-cycled; Connect may fail if it is wedged"
+
+echo "run.sh: starting WM"
 exec ./bin/WM "$@"

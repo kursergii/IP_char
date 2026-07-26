@@ -46,6 +46,8 @@ private:
     // USBTMC over libusb bulk transfers
     bool tmcWrite(const QString &cmd);
     QString tmcQuery(const QString &cmd);
+    void tmcAbortIn();     // USBTMC ABORT_BULK_IN — clears a stuck Bulk-IN (the wedge)
+    void tmcPrime();       // GET_CAPABILITIES + REN_CONTROL, required before bulk I/O
     void sendCmd(const QString &cmd) { tmcWrite(cmd); }
 
     uint16_t vendor_id;

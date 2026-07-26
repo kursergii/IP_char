@@ -14,11 +14,23 @@ set -e
 # Work from the project root (this script's directory)
 cd "$(dirname "$0")"
 
-# ── One-time deployment setup (Raspberry Pi OS / Debian) ─────────────────────
+# ── One-time deployment setup (Raspberry Pi OS / Debian, or Fedora) ──────────
 setup_deps() {
-    echo "==> Installing build dependencies (apt)"
-    sudo apt install -y cmake g++ qt6-base-dev libqt6serialport6-dev \
-        qt6-wayland libusb-1.0-0-dev uhubctl
+    if command -v apt >/dev/null; then
+        echo "==> Installing build dependencies (apt / Debian, Raspberry Pi)"
+        sudo apt install -y cmake g++ qt6-base-dev libqt6serialport6-dev \
+            qt6-wayland libusb-1.0-0-dev uhubctl
+    elif command -v dnf >/dev/null; then
+        echo "==> Installing build dependencies (dnf / Fedora)"
+        sudo dnf install -y cmake gcc-c++ qt6-qtbase-devel qt6-qtserialport-devel \
+            qt6-qtwayland libusb1-devel uhubctl
+    else
+        echo "==> No apt or dnf found — install the equivalents of:"
+        echo "    cmake, g++, Qt6 base+serialport+wayland dev, libusb-1.0 dev, uhubctl"
+    fi
+
+    echo "==> Adding $USER to 'dialout' group (serial access to the pulser)"
+    sudo usermod -aG dialout "$USER"   # takes effect after next login/reboot
 
     echo "==> Installing udev rule for Thorlabs power meter (vendor 1313)"
     echo 'SUBSYSTEM=="usb", ATTRS{idVendor}=="1313", MODE="0666"' \

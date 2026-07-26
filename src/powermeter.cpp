@@ -81,24 +81,15 @@ bool Powermeter::openDevice()
         return false;
     }
 
-    // NOTE: the PM101A can get stuck in a wedged USBTMC state that only a real
-    // VBUS power-cycle clears (a USB bus reset / libusb_reset_device does NOT).
-    // That is handled outside the app by power-cycling the meter's hub port with
-    // uhubctl before launch (see run.sh) — so here we just open and talk to it.
     if (!findAndOpen()) {
         emit connectionResult(false);
         return false;
     }
 
-    // Take the interface away from the kernel usbtmc driver if it grabbed it
-    // (it should be blacklisted — see build.sh deps — since it wedges the PM101A).
-    // With usbtmc blacklisted there is nothing to detach and the device is clean.
-    if (libusb_kernel_driver_active(handle, iface) == 1) {
+    // usbtmc should be blacklisted; detach it just in case it grabbed the iface.
+    if (libusb_kernel_driver_active(handle, iface) == 1)
         if (libusb_detach_kernel_driver(handle, iface) == 0)
             kernel_detached = true;
-        else
-            qWarning() << "Powermeter: could not detach kernel usbtmc driver";
-    }
 
     if (libusb_claim_interface(handle, iface) != 0) {
         qWarning() << "Powermeter: libusb_claim_interface failed";
@@ -106,9 +97,27 @@ bool Powermeter::openDevice()
         return false;
     }
 
-    QString idn = tmcQuery("*IDN?");
+    // The PM101A leaves its Bulk-IN transfer stuck ("wedged") and then silently
+    // ignores queries. Priming it with the USBTMC/USB488 class requests and
+    // clearing a stuck transfer with ABORT_BULK_IN recovers it — this is exactly
+    // what pyvisa-py does, and it is what makes the meter answer reliably.
+    tmcPrime();
+
+    QString idn;
+    const int MAX_ATTEMPTS = 4;
+    for (int attempt = 1; attempt <= MAX_ATTEMPTS; ++attempt) {
+        idn = tmcQuery("*IDN?");
+        if (idn.startsWith("Thorlabs", Qt::CaseInsensitive))
+            break;
+        qWarning() << "Powermeter: no answer (attempt" << attempt
+                   << ") — clearing stuck Bulk-IN and retrying";
+        tmcAbortIn();
+        QThread::msleep(150);
+    }
+
     if (!idn.startsWith("Thorlabs", Qt::CaseInsensitive)) {
-        qWarning() << "Powermeter: unexpected IDN:" << idn;
+        qWarning() << "Powermeter: no valid IDN after" << MAX_ATTEMPTS
+                   << "attempts (try ./run.sh, which power-cycles the meter's port)";
         emit connectionResult(false);
         return false;
     }
@@ -130,10 +139,13 @@ void Powermeter::running()
         QString resp = tmcQuery("MEAS:POW?");
         bool ok = false;
         double watts = resp.toDouble(&ok);
-        if (ok)
+        if (ok) {
             emit sendPower(watts);
-        else
-            qWarning() << "Powermeter: bad response:" << resp;
+        } else {
+            // The meter can wedge mid-run; clear the stuck Bulk-IN in place so the
+            // next read succeeds instead of losing the device.
+            tmcAbortIn();
+        }
         QThread::msleep(500);
     }
 }
@@ -165,6 +177,43 @@ static void put_u32le(QByteArray &b, uint32_t v)
     b.append(char((v >> 8) & 0xff));
     b.append(char((v >> 16) & 0xff));
     b.append(char((v >> 24) & 0xff));
+}
+
+// Prime the meter with the USBTMC/USB488 class control requests before any bulk
+// I/O. pyvisa-py issues these during init; without them the PM101A ignores bulk
+// queries. bmRequestType 0xA1 = device-to-host | class | interface recipient.
+void Powermeter::tmcPrime()
+{
+    if (!handle) return;
+    unsigned char buf[24] = {0};
+    libusb_control_transfer(handle, 0xA1,   7, 0x0000, iface, buf, 24, 1000); // GET_CAPABILITIES
+    libusb_control_transfer(handle, 0xA1, 160, 0x0001, iface, buf,  1, 1000); // REN_CONTROL
+}
+
+// USBTMC ABORT_BULK_IN recovery (USBTMC 1.00 §4.2.1.4/4.2.1.5): clears a stuck
+// Bulk-IN transfer (the SPLIT_IN_PROGRESS "wedge"). This is the recovery
+// pyvisa-py performs on a read error and is what un-wedges the PM101A.
+// bmRequestType 0xA2 = device-to-host | class | ENDPOINT recipient.
+void Powermeter::tmcAbortIn()
+{
+    if (!handle) return;
+    unsigned char st[2] = {0};
+    int n = libusb_control_transfer(handle, 0xA2, 3 /*INITIATE_ABORT_BULK_IN*/,
+                                    btag, ep_in, st, 2, 3000);
+    if (n < 1 || st[0] != 1 /*STATUS_SUCCESS*/)
+        return;
+
+    unsigned char drain[512];
+    int got = 0;
+    libusb_bulk_transfer(handle, ep_in, drain, max_pkt_in, &got, 500);  // drain leftovers
+
+    for (int i = 0; i < 100; ++i) {              // CHECK_ABORT_BULK_IN_STATUS
+        unsigned char cs[8] = {0};
+        libusb_control_transfer(handle, 0xA2, 4, 0x0000, ep_in, cs, 8, 3000);
+        if (cs[0] != 2 /*STATUS_PENDING*/)
+            break;
+        QThread::msleep(50);
+    }
 }
 
 bool Powermeter::tmcWrite(const QString &cmd)
