@@ -33,8 +33,7 @@ _Last updated: 2026-06-11_
 
 **~~7. No git repository~~** ✅ Fixed — initial commit `c7ed75f` on branch `master`.
 
-**8. Raspberry Pi build not tested**
-Native build on RPi OS Bookworm: install `qt6-base-dev`, `libqt6serialport6-dev`, and the PicoTech ARM package, then build as normal.
+**~~8. Raspberry Pi build not tested~~** ✅ Fixed — target is now a Raspberry Pi Zero 2 W kiosk; `build.sh deps`/`build.sh` build natively on RPi OS Bookworm, and `run.sh` handles the PM101A un-wedge power-cycle via `uhubctl` on that hardware.
 
 **9. PM100A averaging count not configurable from UI**
 `averaging_count` defaults to 100 (~300 ms). A `QSpinBox` would let the user trade off noise vs. measurement speed.
@@ -45,8 +44,7 @@ Once calibration (#1) is applied, rename to `Current_A` and use calibrated value
 **11. Osc shutdown can block up to ~10 s**
 If the app is closed while `Osc::openDevice()` is still polling for the PicoScope (up to 10 s timeout), `osc.wait()` in `WM::~WM()` blocks until that polling finishes. Only affects "close immediately after clicking Connect".
 
-**12. `src/wm_ui.py` is a stale artifact**
-Tracked PySide6-generated file from an older 1515×969 layout with different widget names than the current `wm.ui` (e.g. `pushButton_open_com`, separate per-device connect buttons). Not used by the CMake build — safe to delete or regenerate.
+**~~12. `src/wm_ui.py` is a stale artifact~~** ✅ Fixed — deleted. It was PySide6-generated from a `wm.ui` file that no longer exists (the UI moved to hand-written Widgets code); never used by the CMake build.
 
 ---
 

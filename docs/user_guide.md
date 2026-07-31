@@ -1,49 +1,48 @@
 # User Guide — IP_char
 
-Software for measuring and plotting **current vs. optical power (I-P)** curves of pulsed laser diodes. The application controls a laser driver, measures laser current with an oscilloscope, and reads optical power with a calibrated power meter — all simultaneously, with a live plot updated every second.
+Software for measuring and plotting **current vs. optical power (I-P)** curves of pulsed laser diodes. The application controls a laser driver, measures laser current with an oscilloscope, and reads optical power with a calibrated power meter — all simultaneously, with a live plot updated every second. Designed for a touchscreen kiosk with no physical keyboard: any text or number entry opens an on-screen keyboard or numpad instead.
 
 ---
 
 ## First-time setup
 
-### 1. Permissions for the power meter (run once)
+Run once per machine (installs udev rules, dialout group membership, and — on the Pi — the `uhubctl` permissions `run.sh` needs):
 
 ```bash
-echo 'SUBSYSTEM=="usb", ATTRS{idVendor}=="1313", ATTRS{idProduct}=="8079", MODE="0666"' \
-  | sudo tee /etc/udev/rules.d/99-thorlabs-pm100a.rules
-sudo udevadm control --reload-rules && sudo udevadm trigger
+./build.sh deps
 ```
 
-Then unplug and replug the PM100A.
+See [../README.md](../README.md) for the full dependency/build breakdown.
 
-### 2. Connect hardware
+### Connect hardware
 
 Before starting the software, connect all three instruments:
 
 - **Laser pulser** → USB-to-serial adapter
 - **PicoScope 2000** → USB
-- **PM100A power meter** → USB
+- **PM101A power meter** → USB
 
 ---
 
 ## Starting the application
 
 ```bash
-./bin/WM
+./bin/WM          # dev box / manual run
+./run.sh          # on the Pi kiosk — also power-cycles the meter if it's wedged
+./bin/WM -sim     # simulation mode, no hardware needed (also: ./run.sh -sim)
 ```
 
 ### Connect devices
 
-Use the buttons in the top bar, in any order:
+Select the pulser's serial port from the dropdown (use **↺** to refresh the list if it was just plugged in), then click **Connect**. One click attempts all three devices at once; if one fails (e.g. wrong port), fix it and click **Connect** again — it only retries the devices that aren't connected yet.
 
-| Control | Action |
-|---------|--------|
-| Port dropdown + **↺** | Select the serial port for the pulser. Click **↺** to refresh the list if the device was just plugged in. |
-| **connect pulser** | Opens the serial port. The pulser is configured to 150 ns pulses at 10 kHz and the laser is turned OFF. |
-| **connect osc** | Opens the PicoScope 2000 and configures triggered acquisition on Channel A. |
-| **connect PM** | Opens the PM100A and enables auto-ranging. |
+| Indicator | Meaning |
+|-----------|---------|
+| **Pulser** pill | Serial port opened; pulser set to 150 ns pulses at 10 kHz, laser OFF |
+| **Osc** pill | PicoScope 2000 opened, triggered acquisition configured on Channel A |
+| **PM** pill | PM101A opened over USBTMC, auto-ranging enabled |
 
-The **Start** button in the right-hand control panel becomes available once all three devices are connected.
+Each pill turns green as its device connects. The **Start** button in the right-hand control panel enables once all three are green.
 
 ---
 
@@ -51,12 +50,14 @@ The **Start** button in the right-hand control panel becomes available once all 
 
 ### Set the sweep range
 
+The **from** / **to** / **step** fields under "HV sweep (n)" use big −/+ buttons for fine adjustment — tap the number itself to open an on-screen numeric keypad and type an exact value instead.
+
 | Control | Meaning |
 |---------|---------|
-| **n from** | Starting HV DAC value (0–4095). Higher value = higher laser current. |
-| **n step** | Step size between measurements. |
-| **n to** | Final HV DAC value. Must be greater than *n from*. |
-| **b** | Voltage multiplier: **1** = up to ~12.5 V; **2** = up to ~25 V |
+| **from** | Starting HV DAC value (1–4095). Higher value = higher laser current. |
+| **to** | Final HV DAC value (1–4095). Must be greater than *from*. |
+| **step** | Step size between measurements. Must be smaller than (*to* − *from*). |
+| **b** | Voltage multiplier: **×1** = up to ~12.5 V; **×2** = up to ~25 V |
 
 The actual high voltage applied is:
 
@@ -68,43 +69,45 @@ Examples: `n=1000, b=1` → 12.5 V; `n=2000, b=2` → 25 V
 
 ### Run the sweep
 
-1. Press **Start** — the laser turns ON at `n_from`.
+1. Press **Start** — the laser turns ON at `from`.
 2. Every **1 second**, the software:
    - Takes one current reading from the oscilloscope
-   - Takes one power reading from the PM100A
+   - Takes one power reading from the PM101A
    - Plots the point on the I-P graph
-   - Advances the HV to the next step
-3. At `n_to` the laser turns OFF automatically and the Start button re-enables.
+   - Advances the HV by `step`
+3. Once HV passes `to`, the laser turns OFF automatically and **Start** re-enables.
 
 ### Controls during a sweep
 
 | Button | Effect |
 |--------|--------|
-| **Pause** | Stops the timer. The laser and HV stay at the current value. |
-| **Resume** | Continues from where it paused. |
+| **Start** → **Pause** | Click while running to pause the timer. The laser and HV stay at the current value. |
+| **Pause** → **Resume** | Click again to continue from where it paused. |
 | **Stop** | Aborts the sweep and turns the laser OFF. |
 
-The **laser ON** checkbox controls the laser independently — useful for manual checks or keeping the laser warm between sweeps.
+The **Laser ON** checkbox controls the laser independently of any sweep — useful for manual checks or keeping the laser warm between sweeps.
+
+**Clear data** (top bar) wipes the current plot/points without touching the sweep settings.
 
 ---
 
 ## Saving data
 
-Click **Save data** at any point during or after a sweep. A file dialog opens to choose the location. The output is a tab-separated text file:
+Click **Save data**. A dialog opens with the filename pre-filled (`IV-<timestamp>.csv`) and an on-screen keyboard — tap the field to edit the name, then **Enter** or **Save**. The file is written as CSV into the app's working directory (the CSV is comma-separated, not tab-separated):
 
 ```
 # IP characterisation — 2026-05-17T14:32:01
-# HV n_from=100 n_step=50 n_to=2000 b=1
+# HV n_from=100 n_step=25 n_to=4095 b=1
 # Points: 39
-HV_n    Current_V    Power_mW
-100     0.00443      1.234
-150     0.00512      2.018
+HV_n,Current_V,Power_mW
+100,0.00443,1.234
+150,0.00512,2.018
 ...
 ```
 
 - **HV_n** — the DAC value at each step
 - **Current_V** — oscilloscope voltage (divide by the current-sense gain to get amps)
-- **Power_mW** — optical power from the PM100A in milliwatts
+- **Power_mW** — optical power from the PM101A in milliwatts
 
 ---
 
@@ -113,8 +116,8 @@ HV_n    Current_V    Power_mW
 | Symptom | Likely cause | Fix |
 |---------|-------------|-----|
 | Port not in dropdown | Pulser not plugged in | Plug in, click **↺** |
-| "Failed to connect" (pulser) | Wrong port selected | Try other `/dev/ttyUSBx` entries |
-| "Failed to connect" (PM100A) | Missing udev rule or not plugged in | Run the permission command above and replug |
-| Power reads 0 or flat | Laser not firing, or wrong wavelength set | Check laser ON state; verify wavelength correction in source |
+| **Connect** fails for the pulser | Wrong port selected | Try other `/dev/ttyUSBx` entries |
+| **Connect** fails for the PM101A | Kernel usbtmc driver grabbed it, or meter is wedged | Run `./build.sh deps` once (blacklists the kernel driver); on the Pi, use `./run.sh` instead of `./bin/WM` directly — it power-cycles the meter's hub port first |
+| Power reads 0 or flat | Laser not firing, or wrong wavelength set | Check laser ON state; verify wavelength correction in source (`Powermeter::setWavelength`) |
 | Current reads 0 | Trigger not catching pulses | Check Ch-A wiring; verify laser is actually pulsing |
-| Start button stays disabled | One or more devices not connected | All three "connected" buttons must be active |
+| Start button stays disabled | One or more devices not connected | All three status pills (Pulser/Osc/PM) must be green |

@@ -19,3 +19,6 @@ Makefile
 
 # Standalone device test scratch (not part of the build)
 pm_standalone/
+
+# Exported measurement data
+*.csv

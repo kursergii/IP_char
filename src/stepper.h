@@ -4,11 +4,12 @@
 #include <QWidget>
 #include <QString>
 
-class QLabel;
+class QPushButton;
 
 // Touch-friendly numeric stepper: [label]  [ − ]  [ value ]  [ + ]
 // Big buttons with auto-repeat; clamps to [from, to]. Mirrors the QML
-// LabeledStepper component so the Widgets UI matches the QML one.
+// LabeledStepper component so the Widgets UI matches the QML one. Tapping
+// the value opens a virtual numpad to type an exact value directly.
 class Stepper : public QWidget
 {
     Q_OBJECT
@@ -24,9 +25,11 @@ signals:
 
 private:
     void updateLabel();
+    void openNumberPad();
 
+    QString m_label;
     int m_from, m_to, m_step, m_value;
-    QLabel *m_valueLabel = nullptr;
+    QPushButton *m_valueBtn = nullptr;
 };
 
 #endif // STEPPER_H

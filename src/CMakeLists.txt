@@ -45,6 +45,14 @@ add_executable(WM
     powermeter.h
     pulser.cpp
     pulser.h
+    virtualkeyboard.cpp
+    virtualkeyboard.h
+    savefiledialog.cpp
+    savefiledialog.h
+    virtualnumberpad.cpp
+    virtualnumberpad.h
+    numberinputdialog.cpp
+    numberinputdialog.h
 )
 
 target_link_libraries(WM PRIVATE
@@ -65,8 +73,8 @@ target_include_directories(WM PRIVATE
 install(TARGETS WM DESTINATION bin)
 install(FILES
     ${CMAKE_SOURCE_DIR}/../README.md
-    ${CMAKE_SOURCE_DIR}/../commands_pulser.md
-    ${CMAKE_SOURCE_DIR}/../commands_pm100a.md
-    ${CMAKE_SOURCE_DIR}/../commands_ps2000.md
+    ${CMAKE_SOURCE_DIR}/../docs/commands_pulser.md
+    ${CMAKE_SOURCE_DIR}/../docs/commands_pm100a.md
+    ${CMAKE_SOURCE_DIR}/../docs/commands_ps2000.md
     DESTINATION share/doc/WM
 )

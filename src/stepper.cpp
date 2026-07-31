@@ -1,4 +1,5 @@
 #include "stepper.h"
+#include "numberinputdialog.h"
 
 #include <QHBoxLayout>
 #include <QLabel>
@@ -7,7 +8,7 @@
 
 Stepper::Stepper(const QString &label, int from, int to, int step, int value,
                  QWidget *parent)
-    : QWidget(parent), m_from(from), m_to(to), m_step(step),
+    : QWidget(parent), m_label(label), m_from(from), m_to(to), m_step(step),
       m_value(std::clamp(value, from, to))
 {
     auto *lay = new QHBoxLayout(this);
@@ -28,19 +29,21 @@ Stepper::Stepper(const QString &label, int from, int to, int step, int value,
     }
     lay->addWidget(minus);
 
-    m_valueLabel = new QLabel(this);
-    m_valueLabel->setAlignment(Qt::AlignCenter);
-    m_valueLabel->setMinimumHeight(40);
-    m_valueLabel->setStyleSheet(
-        "background:#fafafa; border:1px solid #bbbbbb; border-radius:4px;");
-    QFont vf = m_valueLabel->font(); vf.setPointSize(16); vf.setBold(true);
-    m_valueLabel->setFont(vf);
-    lay->addWidget(m_valueLabel, 1);
+    m_valueBtn = new QPushButton(this);
+    m_valueBtn->setFocusPolicy(Qt::NoFocus);
+    m_valueBtn->setMinimumHeight(40);
+    m_valueBtn->setStyleSheet(
+        "QPushButton { background:#fafafa; border:1px solid #bbbbbb; border-radius:4px; }"
+        "QPushButton:pressed { background:#eeeeee; }");
+    QFont vf = m_valueBtn->font(); vf.setPointSize(16); vf.setBold(true);
+    m_valueBtn->setFont(vf);
+    lay->addWidget(m_valueBtn, 1);
 
     lay->addWidget(plus);
 
     connect(minus, &QPushButton::clicked, this, [this] { setValue(m_value - m_step); });
     connect(plus,  &QPushButton::clicked, this, [this] { setValue(m_value + m_step); });
+    connect(m_valueBtn, &QPushButton::clicked, this, &Stepper::openNumberPad);
 
     updateLabel();
 }
@@ -57,5 +60,13 @@ void Stepper::setValue(int v)
 
 void Stepper::updateLabel()
 {
-    m_valueLabel->setText(QString::number(m_value));
+    m_valueBtn->setText(QString::number(m_value));
+}
+
+void Stepper::openNumberPad()
+{
+    bool ok = false;
+    int v = NumberInputDialog::getInt(this, m_label, "Value", m_value, m_from, m_to, &ok);
+    if (ok)
+        setValue(v);
 }

@@ -13,7 +13,7 @@
 #include <QLabel>
 #include <QCheckBox>
 #include <QMessageBox>
-#include <QFileDialog>
+#include "savefiledialog.h"
 #include <QSerialPortInfo>
 #include <QFile>
 #include <QTextStream>
@@ -472,8 +472,7 @@ void WM::save_data()
     }
 
     QString defaultName = "IV-" + QDateTime::currentDateTime().toString("yyyy-MM-dd_HHmmss") + ".csv";
-    QString fileName = QFileDialog::getSaveFileName(this,
-        "Save data", defaultName, "CSV (*.csv);;All files (*)");
+    QString fileName = SaveFileDialog::getSaveFileName(this, "Save data", defaultName);
     if (fileName.isEmpty())
         return;
     if (!fileName.contains('.'))
