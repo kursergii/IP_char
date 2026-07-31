@@ -1,8 +1,20 @@
 #include "wm.h"
-#include "ui_wm.h"
+#include "plotwidget.h"
+#include "stepper.h"
+
+#include <QWidget>
+#include <QFrame>
+#include <QGroupBox>
+#include <QVBoxLayout>
+#include <QHBoxLayout>
+#include <QGridLayout>
+#include <QPushButton>
+#include <QComboBox>
+#include <QLabel>
+#include <QCheckBox>
 #include <QMessageBox>
+#include "savefiledialog.h"
 #include <QSerialPortInfo>
-#include <QFileDialog>
 #include <QFile>
 #include <QTextStream>
 #include <QDateTime>
@@ -10,81 +22,225 @@
 #include <algorithm>
 #include <cmath>
 
-WM::WM(bool simulate, QWidget *parent) :
-    QMainWindow(parent),
-    ui(new Ui::WM)
+// ── Construction ────────────────────────────────────────────────────────────────
+
+WM::WM(bool simulate, QWidget *parent)
+    : QMainWindow(parent), m_sim(simulate)
 {
-    m_sim = simulate;
-    ui->setupUi(this);
-
-    if (m_sim) {
-        setWindowTitle("WM  [SIMULATION]");
+    setWindowTitle(m_sim ? "WM — I-P Characterisation  [SIMULATION]"
+                         : "WM — I-P Characterisation");
+    if (m_sim)
         qInfo() << "WM: SIMULATION mode — no hardware will be accessed";
-    }
 
-    customPlot = ui->customPlot;
-    customPlot->addGraph();
-    customPlot->yAxis->setLabel("Power, mW");
-    customPlot->xAxis->setLabel("Current, V");  // volts until current-sense calibration applied
-    customPlot->graph(0)->setLineStyle(QCPGraph::lsNone);
-    customPlot->graph(0)->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCrossCircle, 6));
-    DATA.resize(2);  // DATA[0] = current (V), DATA[1] = power (mW)
+    DATA.resize(2);
+    buildUi();
 
     connect(&measureTimer, &QTimer::timeout, this, &WM::onMeasurementStep);
 
-    // Pulser runs in pulserThread — serial I/O never blocks the UI.
-    // All command signals use QueuedConnection automatically (different threads).
+    // Pulser runs in its own thread — serial I/O never blocks the UI.
     pulser.moveToThread(&pulserThread);
-    connect(this,    &WM::requestOpen,            &pulser, &Pulser::open);
-    connect(this,    &WM::requestLaserOn,         &pulser, &Pulser::laserOn);
-    connect(this,    &WM::requestLaserOff,        &pulser, &Pulser::laserOff);
-    connect(this,    &WM::requestSetHV,           &pulser, &Pulser::setHV);
-    connect(&pulser, &Pulser::connectionResult,   this,    &WM::onPulserConnected);
+    connect(this,    &WM::requestOpen,           &pulser, &Pulser::open);
+    connect(this,    &WM::requestLaserOn,        &pulser, &Pulser::laserOn);
+    connect(this,    &WM::requestLaserOff,       &pulser, &Pulser::laserOff);
+    connect(this,    &WM::requestSetHV,          &pulser, &Pulser::setHV);
+    connect(&pulser, &Pulser::connectionResult,  this,    &WM::onPulserConnected);
     pulserThread.start();
 
-    // Osc and Powermeter connections wired once here, not in button slots,
-    // to prevent duplicate connections if buttons are clicked more than once.
     connect(&osc, &Osc::sendData,               this, &WM::read_values);
     connect(&osc, &Osc::connectionResult,        this, &WM::onOscConnected);
     connect(&pm,  &Powermeter::sendPower,        this, &WM::read_power);
     connect(&pm,  &Powermeter::connectionResult, this, &WM::onPmConnected);
 
-    // Populate serial port list at startup; user can restart if port appears later
-    for (const QSerialPortInfo &info : QSerialPortInfo::availablePorts())
-        ui->comboBox_port->addItem(info.portName());
-
-    connects();
+    refreshPorts();
 }
 
 WM::~WM()
 {
-    // Laser off and serial closed from the pulser's own thread before quitting it
     QMetaObject::invokeMethod(&pulser, "close", Qt::BlockingQueuedConnection);
     pulserThread.quit();
     pulserThread.wait();
-
-    osc.stop();
-    osc.wait();
-    pm.stop();
-    pm.wait();
-    delete ui;
+    osc.stop(); osc.wait();
+    pm.stop();  pm.wait();
 }
 
-void WM::connects() {
-    connect(ui->pushButton_connect,     &QPushButton::clicked, this, &WM::connectAll);
-    connect(ui->pushButton_start,       &QPushButton::clicked, this, &WM::onStartClicked);
-    connect(ui->pushButton_stop,        &QPushButton::clicked, this, &WM::stopMeasurement);
-    connect(ui->pushButton_save_data,      &QPushButton::clicked, this, &WM::save_data);
-    connect(ui->pushButton_clear_data,     &QPushButton::clicked, this, &WM::clear_data);
-    connect(ui->pushButton_refresh_ports,  &QPushButton::clicked, this, &WM::refreshPorts);
-    connect(ui->checkBox_laser_on,         &QCheckBox::clicked,   this, &WM::laser_ON);
+// ── UI construction (mirrors Main.qml) ──────────────────────────────────────────
+
+void WM::setPill(QLabel *pill, bool on)
+{
+    pill->setStyleSheet(QString(
+        "QLabel { background:%1; color:white; border-radius:13px;"
+        " padding:3px 12px; font-weight:bold; }")
+        .arg(on ? "#2e7d32" : "#9e9e9e"));
 }
 
-// ── Device connection ──────────────────────────────────────────────────────────
+void WM::setBValue(int b)
+{
+    m_bValue = b;
+    auto style = [](QPushButton *btn, bool sel) {
+        btn->setStyleSheet(sel
+            ? "background:#1f77b4; color:white; font-weight:bold;"
+            : "font-weight:bold;");
+    };
+    style(bBtn1, b == 1);
+    style(bBtn2, b == 2);
+}
 
-void WM::connectAll() {
+void WM::buildUi()
+{
+    auto *central = new QWidget(this);
+    setCentralWidget(central);
+    auto *outer = new QVBoxLayout(central);
+    outer->setContentsMargins(8, 8, 8, 8);
+    outer->setSpacing(8);
+
+    // ── Top bar ─────────────────────────────────────────────────────────────
+    auto *top = new QHBoxLayout;
+    top->setSpacing(8);
+
+    connectBtn = new QPushButton("Connect");
+    connectBtn->setFixedWidth(110);
+    connect(connectBtn, &QPushButton::clicked, this, &WM::connectAll);
+    top->addWidget(connectBtn);
+
+    portCombo = new QComboBox;
+    portCombo->setMinimumWidth(200);
+    top->addWidget(portCombo);
+
+    refreshBtn = new QPushButton("↺");
+    refreshBtn->setFixedWidth(40);
+    refreshBtn->setToolTip("Refresh serial port list");
+    connect(refreshBtn, &QPushButton::clicked, this, &WM::refreshPorts);
+    top->addWidget(refreshBtn);
+
+    pillPulser = new QLabel("Pulser");
+    pillOsc    = new QLabel("Osc");
+    pillPm     = new QLabel("PM");
+    for (QLabel *p : {pillPulser, pillOsc, pillPm}) { setPill(p, false); top->addWidget(p); }
+
+    top->addStretch(1);
+
+    clearBtn = new QPushButton("Clear data");
+    connect(clearBtn, &QPushButton::clicked, this, &WM::clear_data);
+    top->addWidget(clearBtn);
+
+    outer->addLayout(top);
+
+    // ── Plot + control panel ────────────────────────────────────────────────
+    auto *content = new QHBoxLayout;
+    content->setSpacing(12);
+
+    plot = new PlotWidget;
+    plot->setAxisTitles("Current, V", "Power, mW");
+    content->addWidget(plot, 1);
+
+    panel = new QFrame;
+    panel->setFrameShape(QFrame::StyledPanel);
+    panel->setFixedWidth(290);
+    panel->setEnabled(false);   // until all devices connected
+    auto *pl = new QVBoxLayout(panel);
+    pl->setContentsMargins(8, 8, 8, 8);
+    pl->setSpacing(8);
+
+    // Run / Stop
+    auto *runRow = new QHBoxLayout;
+    runRow->setSpacing(10);
+    startBtn = new QPushButton("Start");
+    stopBtn  = new QPushButton("Stop");
+    for (QPushButton *b : {startBtn, stopBtn}) {
+        b->setMinimumHeight(44);
+        QFont f = b->font(); f.setPointSize(15); f.setBold(true); b->setFont(f);
+    }
+    stopBtn->setEnabled(false);
+    connect(startBtn, &QPushButton::clicked, this, &WM::onStartClicked);
+    connect(stopBtn,  &QPushButton::clicked, this, &WM::stopMeasurement);
+    runRow->addWidget(startBtn);
+    runRow->addWidget(stopBtn);
+    pl->addLayout(runRow);
+
+    // HV sweep
+    auto *hvBox = new QGroupBox("HV sweep (n)");
+    auto *hvl = new QVBoxLayout(hvBox);
+    hvl->setContentsMargins(8, 6, 8, 6);
+    hvl->setSpacing(6);
+    sFrom = new Stepper("from", 1, 4095, 25, 1);
+    sTo   = new Stepper("to",   1, 4095, 25, 4095);
+    sStep = new Stepper("step", 1, 500,  5,  100);
+    hvl->addWidget(sFrom);
+    hvl->addWidget(sTo);
+    hvl->addWidget(sStep);
+
+    auto *bRow = new QHBoxLayout;
+    bRow->setSpacing(6);
+    auto *bLbl = new QLabel("b");
+    bLbl->setMinimumWidth(50);
+    { QFont f = bLbl->font(); f.setBold(true); bLbl->setFont(f); }
+    bRow->addWidget(bLbl);
+    bBtn1 = new QPushButton("×1");
+    bBtn2 = new QPushButton("×2");
+    for (QPushButton *b : {bBtn1, bBtn2}) {
+        b->setMinimumHeight(40);
+        QFont f = b->font(); f.setPointSize(14); f.setBold(true); b->setFont(f);
+        bRow->addWidget(b, 1);
+    }
+    connect(bBtn1, &QPushButton::clicked, this, [this] { setBValue(1); });
+    connect(bBtn2, &QPushButton::clicked, this, [this] { setBValue(2); });
+    hvl->addLayout(bRow);
+    pl->addWidget(hvBox);
+
+    // Readings
+    auto *rBox = new QGroupBox("Readings");
+    auto *rg = new QGridLayout(rBox);
+    rg->setContentsMargins(8, 4, 8, 4);
+    rg->setHorizontalSpacing(12);
+    rg->setVerticalSpacing(4);
+    auto bigVal = [](QLabel *l) {
+        l->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+        QFont f = l->font(); f.setPointSize(14); f.setBold(true); l->setFont(f);
+    };
+    currentVal = new QLabel("0.0000");
+    powerVal   = new QLabel("0.000");
+    hvVal      = new QLabel("—");
+    bigVal(currentVal); bigVal(powerVal);
+    { QFont f = hvVal->font(); f.setBold(true); hvVal->setFont(f);
+      hvVal->setAlignment(Qt::AlignRight | Qt::AlignVCenter); }
+    rg->addWidget(new QLabel("Current, V"), 0, 0);  rg->addWidget(currentVal, 0, 1);
+    rg->addWidget(new QLabel("Power, mW"),  1, 0);  rg->addWidget(powerVal,   1, 1);
+    rg->addWidget(new QLabel("HV"),         2, 0);  rg->addWidget(hvVal,      2, 1);
+    pl->addWidget(rBox);
+
+    laserCheck = new QCheckBox("Laser ON");
+    { QFont f = laserCheck->font(); f.setBold(true); laserCheck->setFont(f); }
+    connect(laserCheck, &QCheckBox::clicked, this, &WM::laser_ON);
+    pl->addWidget(laserCheck);
+
+    pl->addStretch(1);
+
+    pointsLabel = new QLabel("0 points collected");
+    pointsLabel->setAlignment(Qt::AlignHCenter);
+    pointsLabel->setStyleSheet("color:#888;");
+    pl->addWidget(pointsLabel);
+
+    saveBtn = new QPushButton("Save data");
+    saveBtn->setMinimumHeight(44);
+    { QFont f = saveBtn->font(); f.setPointSize(14); f.setBold(true); saveBtn->setFont(f); }
+    connect(saveBtn, &QPushButton::clicked, this, &WM::save_data);
+    pl->addWidget(saveBtn);
+
+    content->addWidget(panel);
+    outer->addLayout(content, 1);
+
+    setBValue(1);
+    resize(1024, 568);
+    setMinimumSize(880, 480);
+}
+
+// ── Device connection ───────────────────────────────────────────────────────────
+
+void WM::connectAll()
+{
     if (m_sim) {
         pulser_connected = osc_connected = pm_connected = true;
+        setPill(pillPulser, true); setPill(pillOsc, true); setPill(pillPm, true);
         checkAllConnected();
         return;
     }
@@ -93,17 +249,20 @@ void WM::connectAll() {
     if (!pm_connected)     connectPowermeter();
 }
 
-void WM::connectPulser() {
-    if (ui->comboBox_port->currentText().isEmpty()) {
+void WM::connectPulser()
+{
+    if (portCombo->currentText().isEmpty()) {
         QMessageBox::warning(this, "Pulser", "No serial port selected.");
         return;
     }
-    emit requestOpen(ui->comboBox_port->currentText());
+    emit requestOpen(portCombo->currentText());
 }
 
-void WM::onPulserConnected(bool success) {
+void WM::onPulserConnected(bool success)
+{
     if (success) {
         pulser_connected = true;
+        setPill(pillPulser, true);
         checkAllConnected();
     } else {
         QMessageBox::warning(this, "Pulser",
@@ -111,13 +270,13 @@ void WM::onPulserConnected(bool success) {
     }
 }
 
-void WM::connectOscilloscope() {
-    osc.start();
-}
+void WM::connectOscilloscope() { osc.start(); }
 
-void WM::onOscConnected(bool success) {
+void WM::onOscConnected(bool success)
+{
     if (success) {
         osc_connected = true;
+        setPill(pillOsc, true);
         checkAllConnected();
     } else {
         QMessageBox::warning(this, "Oscilloscope",
@@ -125,13 +284,13 @@ void WM::onOscConnected(bool success) {
     }
 }
 
-void WM::connectPowermeter() {
-    pm.start();
-}
+void WM::connectPowermeter() { pm.start(); }
 
-void WM::onPmConnected(bool success) {
+void WM::onPmConnected(bool success)
+{
     if (success) {
         pm_connected = true;
+        setPill(pillPm, true);
         checkAllConnected();
     } else {
         QMessageBox::warning(this, "Powermeter",
@@ -139,79 +298,85 @@ void WM::onPmConnected(bool success) {
     }
 }
 
-void WM::checkAllConnected() {
+void WM::checkAllConnected()
+{
     if (pulser_connected && osc_connected && pm_connected) {
-        ui->groupBox->setEnabled(true);
-        ui->pushButton_connect->setEnabled(false);
-        ui->pushButton_connect->setText("Connected");
+        panel->setEnabled(true);
+        connectBtn->setEnabled(false);
+        connectBtn->setText("Connected");
     }
 }
 
-// ── Data receivers (called via queued connections from worker threads) ─────────
+// ── Data receivers ──────────────────────────────────────────────────────────────
 
-void WM::read_values(double current_V) {
+void WM::read_values(double current_V)
+{
     latest_current = current_V;
-    ui->label_current->setText(QString::number(current_V));
+    currentVal->setText(QString::number(current_V, 'f', 4));
 }
 
-void WM::read_power(double watts) {
+void WM::read_power(double watts)
+{
     latest_power_W = watts;
-    ui->label_power->setText(QString::number(watts * 1000, 'f', 3) + " mW");
+    powerVal->setText(QString::number(watts * 1000, 'f', 3));
 }
 
-// ── Laser manual control ───────────────────────────────────────────────────────
+// ── Ports / laser ───────────────────────────────────────────────────────────────
 
-void WM::refreshPorts() {
-    QString current = ui->comboBox_port->currentText();
-    ui->comboBox_port->clear();
+void WM::refreshPorts()
+{
+    QString current = portCombo->currentText();
+    portCombo->clear();
     for (const QSerialPortInfo &info : QSerialPortInfo::availablePorts())
-        ui->comboBox_port->addItem(info.portName());
-    // Restore previous selection if it still exists
-    int idx = ui->comboBox_port->findText(current);
+        portCombo->addItem(info.portName());
+    int idx = portCombo->findText(current);
     if (idx >= 0)
-        ui->comboBox_port->setCurrentIndex(idx);
+        portCombo->setCurrentIndex(idx);
 }
 
-void WM::laser_ON() {
-    if (m_sim) return;  // no hardware in simulation
-    if (ui->checkBox_laser_on->isChecked())
-        emit requestLaserOn();
-    else
-        emit requestLaserOff();
+void WM::laser_ON()
+{
+    if (m_sim) return;
+    if (laserCheck->isChecked()) emit requestLaserOn();
+    else                         emit requestLaserOff();
 }
 
-// ── Measurement sweep ──────────────────────────────────────────────────────────
+// ── Measurement sweep ───────────────────────────────────────────────────────────
 
-void WM::clearPlotData() {
+void WM::updateControls()
+{
+    bool running = measureTimer.isActive();
+    startBtn->setText(running ? "Pause" : (m_paused ? "Resume" : "Start"));
+    stopBtn->setEnabled(running || m_paused);
+}
+
+void WM::clearPlotData()
+{
     DATA[0].clear();
     DATA[1].clear();
-    customPlot->graph(0)->data()->clear();
-    customPlot->replot();
-
-    // Reset incremental axis bounds
-    xMin = xMax = yMin = yMax = 0;
+    plot->clear();
+    pointsLabel->setText("0 points collected");
 }
 
-void WM::onStartClicked() {
+void WM::onStartClicked()
+{
     if (!measureTimer.isActive() && !m_paused) {
         startMeasurement();
     } else if (measureTimer.isActive()) {
-        // Pause: freeze the timer but keep the laser on and HV unchanged
         measureTimer.stop();
         m_paused = true;
-        ui->pushButton_start->setText("Resume");
     } else {
-        // Resume from pause
         measureTimer.start(m_sim ? 250 : 1000);
         m_paused = false;
-        ui->pushButton_start->setText("Pause");
     }
+    updateControls();
 }
 
-void WM::startMeasurement() {
-    int n_from = ui->spinBox_HV_n_from->value();
-    int n_to   = ui->spinBox_HV_n_to->value();
-    int n_step = ui->spinBox_HV_n_step->value();
+void WM::startMeasurement()
+{
+    int n_from = sFrom->value();
+    int n_to   = sTo->value();
+    int n_step = sStep->value();
 
     if (n_from >= n_to) {
         QMessageBox::warning(this, "Invalid range", "HV 'from' must be less than 'to'.");
@@ -225,29 +390,27 @@ void WM::startMeasurement() {
     clearPlotData();
 
     sweep_n = n_from;
-    applyHV(sweep_n, ui->spinBox_HV_b->value());
+    applyHV(sweep_n, m_bValue);
     if (!m_sim) emit requestLaserOn();
-    ui->checkBox_laser_on->setChecked(true);
-    ui->pushButton_start->setText("Pause");
-    ui->pushButton_stop->setEnabled(true);
+    laserCheck->setChecked(true);
 
-    // First timer fire is the first measurement (1 s settling time for the laser;
-    // faster in simulation since there is nothing to settle)
     measureTimer.start(m_sim ? 250 : 1000);
+    updateControls();
 }
 
-void WM::stopMeasurement() {
+void WM::stopMeasurement()
+{
     measureTimer.stop();
     m_paused = false;
     if (!m_sim) emit requestLaserOff();
-    ui->checkBox_laser_on->setChecked(false);
-    ui->pushButton_start->setText("Start");
-    ui->pushButton_stop->setEnabled(false);
-    ui->label_hv->setText("HV: —");
+    laserCheck->setChecked(false);
+    hvVal->setText("—");
+    updateControls();
     qInfo() << "Measurement stopped," << DATA[0].size() << "points collected";
 }
 
-void WM::onMeasurementStep() {
+void WM::onMeasurementStep()
+{
     if (!std::isfinite(latest_current) || !std::isfinite(latest_power_W))
         return;
 
@@ -256,80 +419,60 @@ void WM::onMeasurementStep() {
 
     DATA[0].push_back(x);
     DATA[1].push_back(y);
+    plot->addPoint(x, y);
+    pointsLabel->setText(QString::number(DATA[0].size()) + " points collected");
 
-    customPlot->graph(0)->setData(DATA[0], DATA[1]);
+    sweep_n += sStep->value();
 
-    // Update axis bounds incrementally — avoids O(n) scan on every step
-    if (DATA[0].size() == 1) {
-        xMin = xMax = x;
-        yMin = yMax = y;
-    } else {
-        xMin = std::min(xMin, x);  xMax = std::max(xMax, x);
-        yMin = std::min(yMin, y);  yMax = std::max(yMax, y);
-    }
-    if (DATA[0].size() >= 2) {
-        // Ensure non-zero span to avoid QCustomPlot pixel overflow on flat data
-        double xs = (xMax - xMin < 1e-9) ? 1.0 : 0.0;
-        double ys = (yMax - yMin < 1e-9) ? 1.0 : 0.0;
-        customPlot->xAxis->setRange(xMin - xs, xMax + xs);
-        customPlot->yAxis->setRange(yMin - ys, yMax + ys);
-    }
-    customPlot->replot();
-
-    // Advance to next HV step
-    sweep_n += ui->spinBox_HV_n_step->value();
-
-    if (sweep_n > ui->spinBox_HV_n_to->value()) {
+    if (sweep_n > sTo->value()) {
         measureTimer.stop();
         m_paused = false;
         if (!m_sim) emit requestLaserOff();
-        ui->checkBox_laser_on->setChecked(false);
-        ui->pushButton_start->setText("Start");
-        ui->pushButton_stop->setEnabled(false);
-        ui->label_hv->setText("HV: —");
+        laserCheck->setChecked(false);
+        hvVal->setText("—");
+        updateControls();
         qInfo() << "Measurement complete," << DATA[0].size() << "points";
     } else {
-        applyHV(sweep_n, ui->spinBox_HV_b->value());
+        applyHV(sweep_n, m_bValue);
     }
 }
 
-// ── HV setpoint: drive hardware, or synthesise data in simulation mode ───────────
+// ── HV setpoint: hardware or simulation ─────────────────────────────────────────
 
-void WM::applyHV(int n, int b) {
-    ui->label_hv->setText(QString("HV: n=%1, b=%2").arg(n).arg(b));
+void WM::applyHV(int n, int b)
+{
+    hvVal->setText(QString("n=%1, b=%2").arg(n).arg(b));
     if (m_sim) applySimHV(n, b);
     else       emit requestSetHV(n, b);
 }
 
-void WM::applySimHV(int n, int b) {
-    // Synthetic laser-diode model for UI testing without hardware.
-    // Drive ∝ HV setpoint; optical power follows an L-I curve (threshold + slope).
+void WM::applySimHV(int n, int b)
+{
+    // Synthetic laser-diode L-I curve (threshold + slope) for UI testing.
     auto noise = [](double frac) {
         return 1.0 + frac * (QRandomGenerator::global()->generateDouble() - 0.5);
     };
-
-    double drive     = (n / 4096.0) * b;             // ~0 .. 2
-    double current_V = 0.05 * drive * noise(0.02);   // osc "current" reading, volts
-
-    const double I_th = 0.012;                        // lasing threshold (same V units)
+    double drive     = (n / 4096.0) * b;
+    double current_V = 0.05 * drive * noise(0.02);
+    const double I_th = 0.012;
     double power_W = current_V > I_th ? 0.8 * (current_V - I_th) : 0.0;
     power_W = std::max(0.0, power_W * noise(0.04));
 
-    read_values(current_V);   // updates latest_current + label
-    read_power(power_W);       // updates latest_power_W + label
+    read_values(current_V);
+    read_power(power_W);
 }
 
-// ── Data export ────────────────────────────────────────────────────────────────
+// ── Data export ─────────────────────────────────────────────────────────────────
 
-void WM::save_data() {
+void WM::save_data()
+{
     if (DATA[0].isEmpty()) {
         QMessageBox::information(this, "Save data", "No data to save.");
         return;
     }
 
     QString defaultName = "IV-" + QDateTime::currentDateTime().toString("yyyy-MM-dd_HHmmss") + ".csv";
-    QString fileName = QFileDialog::getSaveFileName(this,
-        "Save data", defaultName, "CSV (*.csv);;Tab-separated (*.txt);;All files (*)");
+    QString fileName = SaveFileDialog::getSaveFileName(this, "Save data", defaultName);
     if (fileName.isEmpty())
         return;
     if (!fileName.contains('.'))
@@ -343,25 +486,24 @@ void WM::save_data() {
 
     QTextStream out(&file);
     out << "# IP characterisation — " << QDateTime::currentDateTime().toString(Qt::ISODate) << "\n";
-    out << "# HV n_from=" << ui->spinBox_HV_n_from->value()
-        << " n_step="     << ui->spinBox_HV_n_step->value()
-        << " n_to="       << ui->spinBox_HV_n_to->value()
-        << " b="          << ui->spinBox_HV_b->value() << "\n";
+    out << "# HV n_from=" << sFrom->value()
+        << " n_step="     << sStep->value()
+        << " n_to="       << sTo->value()
+        << " b="          << m_bValue << "\n";
     out << "# Points: " << DATA[0].size() << "\n";
-    out << "HV_n\tCurrent_V\tPower_mW\n";
+    out << "HV_n,Current_V,Power_mW\n";
 
-    // n at measurement i = n_from + i × n_step (sweep always advances by fixed step)
-    int n    = ui->spinBox_HV_n_from->value();
-    int step = ui->spinBox_HV_n_step->value();
+    int n    = sFrom->value();
+    int step = sStep->value();
     for (int i = 0; i < DATA[0].size(); ++i) {
-        out << n << "\t" << DATA[0][i] << "\t" << DATA[1][i] << "\n";
+        out << n << "," << DATA[0][i] << "," << DATA[1][i] << "\n";
         n += step;
     }
-
     file.close();
     qInfo() << "Saved" << DATA[0].size() << "points to" << fileName;
 }
 
-void WM::clear_data() {
+void WM::clear_data()
+{
     clearPlotData();
 }

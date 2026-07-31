@@ -1,6 +1,6 @@
-# Thorlabs PM100A Commands Reference
+# Thorlabs PM100A / PM101A Commands Reference
 
-Device: Thorlabs PM100A Optical Power Meter | Interface: USBTMC (`/dev/usbtmc0`)
+Device: Thorlabs PM100A / PM101A Optical Power Meter | Interface: USBTMC. The SCPI command set below is shared by both meters. The app currently ships with a **PM101A**.
 
 ## Syntax
 
@@ -137,14 +137,18 @@ SENS:AVER:COUN <n>
 | Setting | Value |
 |---------|-------|
 | Interface | USBTMC (USB Test and Measurement Class) |
-| Device node | `/dev/usbtmc0` |
+| Transport used by this app | **libusb**, talking to the bulk endpoints directly — *not* the kernel `usbtmc` driver / `/dev/usbtmc0`. The kernel driver fails to open (`-110`) and wedges the PM101A; `build.sh deps` blacklists it. See [powermeter.cpp](../src/powermeter.cpp). |
 | Terminator | `\n` (newline) |
-| Permissions | requires udev rule (vendor `1313`, product `8079`) |
+| Vendor ID | `1313` (Thorlabs, both meters) |
+| Product ID | `8079` (PM100A) / `8076` (PM101A) |
+| Permissions | udev rule matching vendor `1313` (see below) — `build.sh deps` installs this automatically |
 
 ## udev Rule (one-time setup)
 
+`build.sh deps` installs this for you. To do it by hand:
+
 ```bash
-echo 'SUBSYSTEM=="usb", ATTRS{idVendor}=="1313", ATTRS{idProduct}=="8079", MODE="0666"' \
-  | sudo tee /etc/udev/rules.d/99-thorlabs-pm100a.rules
+echo 'SUBSYSTEM=="usb", ATTRS{idVendor}=="1313", MODE="0666"' \
+  | sudo tee /etc/udev/rules.d/99-thorlabs-libusb.rules
 sudo udevadm control --reload-rules && sudo udevadm trigger
 ```

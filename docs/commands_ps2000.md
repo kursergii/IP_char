@@ -92,8 +92,8 @@ ps2000_set_trigger(handle, source, threshold, direction, delay, auto_trigger_ms)
 
 **Used in this project:**
 ```c
-ps2000_set_trigger(handle, PS2000_CHANNEL_A, -1000, PS2000_FALLING, 50, 10);
-// Trigger on Ch-A falling through -1000 ADU; auto-fire after 10 ms
+ps2000_set_trigger(handle, PS2000_CHANNEL_A, -5000, PS2000_FALLING, 50, 10);
+// Trigger on Ch-A falling through -5000 ADU; auto-fire after 10 ms
 ```
 
 ---
@@ -127,7 +127,7 @@ ps2000_stop(handle)
 | 4 | 160 ns | 163.84 µs |
 | 5 | 320 ns | 327.68 µs |
 
-**Used in this project:** timebase 1 (20 ns/sample) → 1024 samples covers 20 µs, enough to capture a 150 ns pulse with ~7 samples inside the pulse.
+**Used in this project:** timebase 3 (80 ns/sample) → 1024 samples covers ~82 µs, comfortably bracketing a 150 ns pulse.
 
 ---
 
@@ -161,7 +161,7 @@ run_osc() — called per measurement:
   ps2000_set_channel(Ch-A, enabled, DC, range_a)
   ps2000_set_channel(Ch-B, enabled, DC, range_b)
   for each of N blocks:
-    ps2000_run_block(1024 samples, timebase=1, oversample=0)
+    ps2000_run_block(1024 samples, timebase=3, oversample=0)
     poll ps2000_ready()
     ps2000_get_values(buffer_a, buffer_b, ...)
     peak_A = -min(buffer_a)         // negative pulse → negate min

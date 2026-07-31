@@ -3,9 +3,17 @@
 
 #include <QThread>
 #include <QString>
+#include <QByteArray>
 #include <atomic>
+#include <cstdint>
 
-// Controls a Thorlabs PM100A optical power meter via USBTMC (/dev/usbtmc0).
+struct libusb_context;
+struct libusb_device_handle;
+
+// Controls a Thorlabs PM100A / PM101A optical power meter over USBTMC, spoken
+// directly to the device's bulk endpoints via libusb (NOT the kernel usbtmc
+// driver). The kernel usbtmc driver fails on the PM101A (-110); libusb — the
+// same path the Thorlabs/Windows driver uses — works for both meters.
 // Emits sendPower(watts) continuously after each MEAS:POW? query.
 class Powermeter : public QThread
 {
@@ -13,10 +21,12 @@ class Powermeter : public QThread
     void run() Q_DECL_OVERRIDE {
         if (openDevice())
             running();
+        cleanup();
     }
 
 public:
-    explicit Powermeter(const QString &device = "/dev/usbtmc0");
+    // Matches any Thorlabs meter by vendor id (0x1313); first one found is used.
+    explicit Powermeter(uint16_t vendorId = 0x1313);
     void setWavelength(int nm);
     void setAveraging(int count);  // 1 sample ≈ 3 ms; e.g. 100 → ~300 ms per reading
 
@@ -29,14 +39,29 @@ signals:
 
 private:
     bool openDevice();
+    bool findAndOpen();   // scan for the meter, open handle, resolve endpoints
     void running();
-    QString query(const QString &cmd);
-    void sendCmd(const QString &cmd);
+    void cleanup();
 
-    QString device_path;
-    int fd = -1;
-    int wavelength_nm = 1550;   // default operating wavelength for photodiode correction
-    int averaging_count = 100;  // hardware averaging: 100 samples × 3 ms ≈ 300 ms per reading
+    // USBTMC over libusb bulk transfers
+    bool tmcWrite(const QString &cmd);
+    QString tmcQuery(const QString &cmd);
+    void tmcAbortIn();     // USBTMC ABORT_BULK_IN — clears a stuck Bulk-IN (the wedge)
+    void tmcPrime();       // GET_CAPABILITIES + REN_CONTROL, required before bulk I/O
+    void sendCmd(const QString &cmd) { tmcWrite(cmd); }
+
+    uint16_t vendor_id;
+    libusb_context       *ctx    = nullptr;
+    libusb_device_handle *handle = nullptr;
+    int      iface       = 0;
+    uint8_t  ep_out      = 0;
+    uint8_t  ep_in       = 0;
+    int      max_pkt_in  = 64;   // bulk-IN wMaxPacketSize (read rounding)
+    uint8_t  btag        = 0;
+    bool     kernel_detached = false;
+
+    int wavelength_nm   = 1550;  // default operating wavelength for correction
+    int averaging_count = 100;   // hardware averaging: 100 × 3 ms ≈ 300 ms/reading
     std::atomic<bool> running_pm{false};
 };
 
