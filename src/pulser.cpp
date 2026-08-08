@@ -42,8 +42,8 @@ void Pulser::open(const QString &port)
     // Set default pulse parameters:
     //   P:3,200  → width=150 ns (3×50 ns), period=10 µs (200×50 ns) = 100 kHz base rate
     //   MS:1,10  → 1 of every 10 base pulses → effective 10 kHz
-    setPulse(3, 200);
-    setModulationSync(1, 10);
+    setPulse(kPulseWidth50ns, kPulsePeriod50ns);
+    setModulationSync(kModWs, kModPs);
     qWarning() << "Pulser pulse:" << queryPulse();
 
     // Switch from potentiometer (b=0) to DAC control (b=1) at zero voltage

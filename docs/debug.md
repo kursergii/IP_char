@@ -6,10 +6,8 @@ _Last updated: 2026-06-11_
 
 ## 🔴 Must fix before release
 
-**1. Current calibration factor missing**
-`ret_A` from the oscilloscope is in **volts**, not amps. The x-axis label says "Current, V" but an I-P curve requires amps. The current-sense circuit conversion factor (`1/R_sense`) must be applied.
-- Add a `QDoubleSpinBox` for calibration gain in the UI, or hardcode if R_sense is fixed.
-- Apply: `ret_A = max_A * range_values[range_a] * calibration_gain`
+**1. Current calibration factor missing — plumbing done, value still needed**
+`ret_A` from the oscilloscope is in **volts**, not amps. The x-axis label says "Current, V" but an I-P curve requires amps. `Osc::calibration_gain` ([oscilloscope.h](../src/oscilloscope.h)) now multiplies into `ret_A`, but it's a **placeholder of 1.0** — `ret_A` is still raw volts until the real current-sense circuit gain (sense-resistor ohms, or transimpedance V/A) is measured and dropped in. Once that's done: update `calibration_gain`, then fix the UI/CSV labels (still say "V" — see #10).
 
 **~~2. Oscilloscope trigger quality unverified~~** ✅ Fixed — diagnostic `qWarning` distribution-logging block removed from `run_osc()`.
 

@@ -21,6 +21,16 @@ public:
     QString queryPulse();
     QString version();
 
+    // Default pulse settings applied on connect (see open()), in 50 ns steps —
+    // 150 ns width, 10 µs base period (100 kHz), gated 1-of-10 for an effective
+    // 10 kHz. Exposed so WM can derive the duty cycle for peak-power display
+    // without duplicating these numbers; stays correct only as long as nothing
+    // reprograms the pulser to different settings at runtime.
+    static constexpr int kPulseWidth50ns  = 3;
+    static constexpr int kPulsePeriod50ns = 200;
+    static constexpr int kModWs = 1;
+    static constexpr int kModPs = 10;
+
 public slots:
     void open(const QString &port);   // emits connectionResult(true/false) when done
     void close();

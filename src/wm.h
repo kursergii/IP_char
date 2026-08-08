@@ -5,6 +5,7 @@
 #include <QTimer>
 #include <QThread>
 #include <QVector>
+#include <QElapsedTimer>
 
 #include "oscilloscope.h"
 #include "powermeter.h"
@@ -87,6 +88,7 @@ private:
     QPushButton *bBtn2       = nullptr;
     QLabel      *currentVal  = nullptr;
     QLabel      *powerVal    = nullptr;
+    QLabel      *peakPowerVal = nullptr;
     QLabel      *hvVal       = nullptr;
     QCheckBox   *laserCheck  = nullptr;
     QLabel      *pointsLabel = nullptr;
@@ -108,10 +110,26 @@ private:
     double latest_current = 0;
     double latest_power_W = 0;
 
+    // Watchdog: reset whenever read_values()/read_power() delivers a fresh
+    // reading. If a sweep step finds either stale beyond kStaleTimeoutMs, the
+    // device stopped responding (e.g. USB dropout) — the sweep aborts instead
+    // of silently re-plotting the last known value as if it were current.
+    static constexpr qint64 kStaleTimeoutMs = 5000;
+    QElapsedTimer m_currentUpdateTimer;
+    QElapsedTimer m_powerUpdateTimer;
+
     bool m_sim            = false;
     bool pulser_connected = false;
     bool osc_connected    = false;
     bool pm_connected     = false;
+
+    // PM101A reads *average* power; a pulsed laser's peak power during each
+    // pulse is much higher. Peak = average / duty_cycle. Derived from Pulser's
+    // fixed default pulse settings (width/period/gating), not a live query —
+    // goes stale if the pulser is ever reprogrammed to different timing.
+    static constexpr double kPulseDutyCycle =
+        (double(Pulser::kPulseWidth50ns) / Pulser::kPulsePeriod50ns) *
+        (double(Pulser::kModWs) / Pulser::kModPs);
 };
 
 #endif // WM_H

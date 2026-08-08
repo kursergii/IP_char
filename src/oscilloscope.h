@@ -7,8 +7,9 @@
 
 // Continuously acquires laser current pulses from a PicoScope 2000 in a background thread.
 // Ch-A: triggered peak detection on a negative current pulse (pulsed laser measurement).
-// Ch-B: unused — optical power is measured by the PM100A power meter instead.
-// Emits sendData(current_V, 0) after each averaged, auto-ranged acquisition cycle.
+// Ch-B: not surfaced to WM — optical power is measured by the PM101A power meter instead
+// (still acquired and auto-ranged internally every cycle; see docs/debug.md #3).
+// Emits sendData(current_V) after each averaged, auto-ranged acquisition cycle.
 class Osc : public QThread
 {
     Q_OBJECT
@@ -29,7 +30,7 @@ class Osc : public QThread
     int16_t range_b = 2;     // unused — kept to satisfy ps2000_set_channel for Ch-B
 
     // ── Measurement results (written by acquisition thread) ──────────────────
-    double ret_A = 0;        // calibrated Ch-A result (volts); apply 1/R_sense for amps
+    double ret_A = 0;        // Ch-A result: volts × calibration_gain (amps once calibrated)
     double ret_B = 0;        // Ch-B result (volts); not used — PM100A handles power
 
     // ── Internal acquisition buffers ─────────────────────────────────────────
@@ -63,6 +64,12 @@ class Osc : public QThread
         0.00061037018952,      // PS2000_20V    ← maximum used range
         0.00152592547380,      // PS2000_50V
     };
+
+    // Current-sense circuit conversion, amps per volt at the PicoScope input.
+    // PLACEHOLDER: 1.0 means ret_A is still raw oscilloscope volts, not amps —
+    // replace with the real value once the sense-resistor/transimpedance gain
+    // of the current-sense circuit is measured. See docs/debug.md #1.
+    static constexpr double calibration_gain = 1.0;
 
 private:
     std::atomic<bool> running_osc{false};

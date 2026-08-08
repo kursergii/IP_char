@@ -7,7 +7,17 @@
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QDir>
+#include <QFile>
 #include <QFont>
+#include <QMessageBox>
+
+// Default to .csv if the operator didn't type an extension.
+static QString withDefaultExtension(QString name)
+{
+    if (!name.contains('.'))
+        name += ".csv";
+    return name;
+}
 
 SaveFileDialog::SaveFileDialog(const QString &title, const QString &defaultName,
                                QWidget *parent)
@@ -44,8 +54,18 @@ SaveFileDialog::SaveFileDialog(const QString &title, const QString &defaultName,
 
     connect(cancelBtn, &QPushButton::clicked, this, &QDialog::reject);
     auto tryAccept = [this] {
-        if (!m_nameEdit->text().trimmed().isEmpty())
-            accept();
+        QString name = m_nameEdit->text().trimmed();
+        if (name.isEmpty())
+            return;
+        name = withDefaultExtension(name);
+        if (QFile::exists(QDir::current().filePath(name))) {
+            auto reply = QMessageBox::question(this, "Overwrite file?",
+                "\"" + name + "\" already exists. Overwrite it?",
+                QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+            if (reply != QMessageBox::Yes)
+                return;
+        }
+        accept();
     };
     connect(saveBtn, &QPushButton::clicked, this, tryAccept);
     connect(keyboard, &VirtualKeyboard::enterPressed, this, tryAccept);
@@ -59,5 +79,5 @@ QString SaveFileDialog::getSaveFileName(QWidget *parent, const QString &title,
     SaveFileDialog dlg(title, defaultName, parent);
     if (dlg.exec() != QDialog::Accepted)
         return QString();
-    return QDir::current().filePath(dlg.m_nameEdit->text().trimmed());
+    return QDir::current().filePath(withDefaultExtension(dlg.m_nameEdit->text().trimmed()));
 }

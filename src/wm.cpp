@@ -197,15 +197,17 @@ void WM::buildUi()
         l->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
         QFont f = l->font(); f.setPointSize(14); f.setBold(true); l->setFont(f);
     };
-    currentVal = new QLabel("0.0000");
-    powerVal   = new QLabel("0.000");
-    hvVal      = new QLabel("—");
-    bigVal(currentVal); bigVal(powerVal);
+    currentVal   = new QLabel("0.0000");
+    powerVal     = new QLabel("0.000");
+    peakPowerVal = new QLabel("0.000");
+    hvVal        = new QLabel("—");
+    bigVal(currentVal); bigVal(powerVal); bigVal(peakPowerVal);
     { QFont f = hvVal->font(); f.setBold(true); hvVal->setFont(f);
       hvVal->setAlignment(Qt::AlignRight | Qt::AlignVCenter); }
-    rg->addWidget(new QLabel("Current, V"), 0, 0);  rg->addWidget(currentVal, 0, 1);
-    rg->addWidget(new QLabel("Power, mW"),  1, 0);  rg->addWidget(powerVal,   1, 1);
-    rg->addWidget(new QLabel("HV"),         2, 0);  rg->addWidget(hvVal,      2, 1);
+    rg->addWidget(new QLabel("Current, V"),      0, 0);  rg->addWidget(currentVal,   0, 1);
+    rg->addWidget(new QLabel("Power (avg), mW"), 1, 0);  rg->addWidget(powerVal,     1, 1);
+    rg->addWidget(new QLabel("Power (peak), mW"),2, 0);  rg->addWidget(peakPowerVal, 2, 1);
+    rg->addWidget(new QLabel("HV"),              3, 0);  rg->addWidget(hvVal,        3, 1);
     pl->addWidget(rBox);
 
     laserCheck = new QCheckBox("Laser ON");
@@ -313,12 +315,17 @@ void WM::read_values(double current_V)
 {
     latest_current = current_V;
     currentVal->setText(QString::number(current_V, 'f', 4));
+    m_currentUpdateTimer.restart();
 }
 
 void WM::read_power(double watts)
 {
     latest_power_W = watts;
     powerVal->setText(QString::number(watts * 1000, 'f', 3));
+    // PM101A reads average power; the pulsed laser's actual peak power during
+    // each 150 ns pulse is far higher — see kPulseDutyCycle.
+    peakPowerVal->setText(QString::number(watts * 1000 / kPulseDutyCycle, 'f', 1));
+    m_powerUpdateTimer.restart();
 }
 
 // ── Ports / laser ───────────────────────────────────────────────────────────────
@@ -390,10 +397,14 @@ void WM::startMeasurement()
     clearPlotData();
 
     sweep_n = n_from;
+    m_currentUpdateTimer.start();
+    m_powerUpdateTimer.start();
     applyHV(sweep_n, m_bValue);
     if (!m_sim) emit requestLaserOn();
     laserCheck->setChecked(true);
 
+    // Real hardware needs the full 1 s for the PM101A's averaged reading to
+    // settle; simulation has no such constraint, so it runs faster for UI testing.
     measureTimer.start(m_sim ? 250 : 1000);
     updateControls();
 }
@@ -411,6 +422,17 @@ void WM::stopMeasurement()
 
 void WM::onMeasurementStep()
 {
+    if (m_currentUpdateTimer.elapsed() > kStaleTimeoutMs ||
+        m_powerUpdateTimer.elapsed() > kStaleTimeoutMs) {
+        stopMeasurement();
+        QMessageBox::warning(this, "Measurement stalled",
+            QString("No new reading from the oscilloscope or power meter for %1 s "
+                    "— sweep stopped so stale data isn't recorded as if it were fresh.\n\n"
+                    "Check the USB connections, then Start again.")
+                .arg(kStaleTimeoutMs / 1000));
+        return;
+    }
+
     if (!std::isfinite(latest_current) || !std::isfinite(latest_power_W))
         return;
 
@@ -475,8 +497,6 @@ void WM::save_data()
     QString fileName = SaveFileDialog::getSaveFileName(this, "Save data", defaultName);
     if (fileName.isEmpty())
         return;
-    if (!fileName.contains('.'))
-        fileName += ".csv";
 
     QFile file(fileName);
     if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
@@ -505,5 +525,12 @@ void WM::save_data()
 
 void WM::clear_data()
 {
+    if (!DATA[0].isEmpty()) {
+        auto reply = QMessageBox::question(this, "Clear data",
+            "Discard " + QString::number(DATA[0].size()) + " unsaved point(s)?",
+            QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+        if (reply != QMessageBox::Yes)
+            return;
+    }
     clearPlotData();
 }

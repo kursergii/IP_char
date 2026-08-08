@@ -83,7 +83,7 @@ void Osc::run_osc() {
     max_B = static_cast<short>(std::fabs(cB) / NUM_BLOCKS);
 
     // Store the mean peak for the final calibrated result
-    ret_A = (cA / NUM_BLOCKS) * range_values[range_a];
+    ret_A = (cA / NUM_BLOCKS) * range_values[range_a] * calibration_gain;
     ret_B = max_B * range_values[range_b];
 }
 
