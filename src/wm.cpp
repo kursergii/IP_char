@@ -494,7 +494,8 @@ void WM::save_data()
     }
 
     QString defaultName = "IV-" + QDateTime::currentDateTime().toString("yyyy-MM-dd_HHmmss") + ".csv";
-    QString fileName = SaveFileDialog::getSaveFileName(this, "Save data", defaultName);
+    QString usbDir = SaveFileDialog::findRemovableDrive();
+    QString fileName = SaveFileDialog::getSaveFileName(this, "Save data", defaultName, usbDir);
     if (fileName.isEmpty())
         return;
 

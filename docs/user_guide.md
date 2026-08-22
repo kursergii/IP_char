@@ -111,6 +111,52 @@ HV_n,Current_V,Power_mW
 
 ---
 
+## Remote control from a PC
+
+Instead of the touchscreen GUI, the Pi can run **headless** (no display at all) while a separate GUI on a Linux/Mac/Windows PC controls it remotely — same sweep controls, same live plot, but Save writes the CSV on the PC, not the Pi.
+
+### One-time setup on the Pi
+
+```bash
+./build.sh deps          # if not already done
+./bluetooth_setup.sh     # makes the Pi discoverable/pairable over Bluetooth,
+                          # bridges paired PCs onto its own subnet, and sets
+                          # wm_headless to auto-start on every boot
+```
+
+After this, `wm_headless` is already running and stays running — nothing to launch by hand. (`bluetooth_setup.sh` is Pi-side system/network configuration, built from the documented BlueZ NAP pattern but not verified against real hardware — if something doesn't come up, check `sudo systemctl status bt-agent bt-pan-nap wm-headless dnsmasq` on the Pi.)
+
+Don't want Bluetooth? Skip `bluetooth_setup.sh` entirely — `wm_headless` listens on every network interface, so as long as the Pi and PC are on the same WiFi/Ethernet network, the PC just needs the Pi's regular IP address (see [Other WiFi during a measurement](#other-wifi-during-a-measurement) below for the tradeoff).
+
+### Pairing the PC over Bluetooth
+
+- **Linux**: Settings → Bluetooth → pair with the Pi. NetworkManager brings up the PAN connection automatically once paired.
+- **Windows**: Settings → Bluetooth & devices → Add device → pair with the Pi, then right-click it in the Bluetooth device list → **Join a Personal Area Network**.
+- **macOS**: System Settings → Bluetooth → pair with the Pi. It should then appear as a network interface in System Settings → Network.
+
+Once paired, the Pi's Bluetooth PAN address is `10.42.0.1` (see `bluetooth_setup.sh`) unless that's been changed.
+
+### Using pc_client
+
+```bash
+./pc_client/build/pc_client
+```
+
+1. Enter the Pi's address (Bluetooth PAN: `10.42.0.1`; WiFi/Ethernet: its regular IP) and port (`8765` by default), click **Connect**.
+2. Once linked, pick the pulser's serial port from the dropdown (**↺** to refresh) and click **Connect devices** — same three status pills as the GUI app.
+3. Sweep controls, readings, and the plot all work exactly as in the touchscreen app. **Save data** opens a normal file dialog and writes the CSV locally on the PC.
+
+### Other WiFi during a measurement
+
+If the Pi and PC talk over WiFi (Pi joined to your existing network, or a WiFi hotspot the Pi itself hosts), whether the PC can *also* use other WiFi at the same time depends on which:
+
+- **Pi joins your existing WiFi/LAN**: no conflict — it's the same network the PC already has internet through.
+- **Pi hosts its own WiFi hotspot**: most PCs have one WiFi radio, so connecting to the Pi's hotspot drops whatever other WiFi network you were on.
+
+Bluetooth avoids this entirely — it's a separate radio from WiFi on both ends, so the PC's WiFi stays free for anything else during a measurement.
+
+---
+
 ## Troubleshooting
 
 | Symptom | Likely cause | Fix |
@@ -121,3 +167,4 @@ HV_n,Current_V,Power_mW
 | Power reads 0 or flat | Laser not firing, or wrong wavelength set | Check laser ON state; verify wavelength correction in source (`Powermeter::setWavelength`) |
 | Current reads 0 | Trigger not catching pulses | Check Ch-A wiring; verify laser is actually pulsing |
 | Start button stays disabled | One or more devices not connected | All three status pills (Pulser/Osc/PM) must be green |
+| pc_client "Connect" fails / times out | `wm_headless` isn't running on the Pi, wrong address/port, or Bluetooth PAN isn't bridged | On the Pi: `sudo systemctl status wm-headless bt-pan-nap`. Confirm the address (`10.42.0.1` for Bluetooth PAN, or the Pi's normal IP for WiFi/Ethernet) |

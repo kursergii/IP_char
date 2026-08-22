@@ -117,6 +117,23 @@ See [docs/user_guide.md](docs/user_guide.md) for the full measurement walkthroug
 
 ---
 
+## Remote control (headless Pi + PC client)
+
+The Pi can also run with **no display at all** — `wm_headless` owns the hardware and takes commands as text lines (over stdin locally, or TCP remotely), while a separate GUI, `pc_client`, runs on a Linux/Mac/Windows PC and drives it over the network. `pc_client` is a fully independent build (`pc_client/CMakeLists.txt`) needing only `Qt6::Widgets`/`Qt6::Network` — no libusb, no libps2000, no QtSerialPort — so it builds on a plain PC with none of the lab-hardware SDKs installed.
+
+```bash
+./run_headless.sh          # on the Pi: same PM101A un-wedge as run.sh, then wm_headless
+./run_headless.sh -sim     # simulation mode, no hardware needed
+```
+
+`wm_headless` listens on TCP port `8765` by default (`-port` to override) and speaks the same command protocol on both stdin and the socket — see the comment block in [src/headless_main.cpp](src/headless_main.cpp) for the full command list.
+
+`./bluetooth_setup.sh` (Pi-side, one-time) turns the Pi into a Bluetooth PAN access point and sets `wm_headless` to auto-start on boot, so a PC can reach it over Bluetooth instead of needing to share a WiFi/Ethernet network. **Not verified on real hardware** — built from the documented BlueZ NAP pattern, but there was no Bluetooth-capable Pi/PC available to test against while writing it; check `sudo systemctl status bt-agent bt-pan-nap wm-headless dnsmasq` on the Pi if it doesn't come up as expected.
+
+See [docs/user_guide.md](docs/user_guide.md#remote-control-from-a-pc) for the full pairing walkthrough (per-OS steps) and `pc_client` usage.
+
+---
+
 ## Touchscreen input
 
 The kiosk has no physical keyboard, so text/number entry fields open an on-screen control instead of relying on `QFileDialog`/typed input:
@@ -147,8 +164,10 @@ HV_n,Current_V,Power_mW
 
 ```
 src/
-  main.cpp                — Qt entry point, -sim flag handling
+  main.cpp                — Qt entry point (WM GUI), -sim flag handling
   wm.h / wm.cpp            — main window: UI, sweep control, device coordination
+  wmcore.h/cpp             — headless equivalent of WM's coordination logic, no UI
+  headless_main.cpp        — QCoreApplication entry point for wm_headless (stdin + TCP)
   oscilloscope.h/cpp       — Osc (QThread): triggered peak acquisition via PicoScope
   powermeter.h/cpp         — Powermeter (QThread): MEAS:POW? loop via PM101A over libusb/USBTMC
   pulser.h/cpp             — Pulser (QObject, own thread): serial control of laser driver
@@ -158,12 +177,16 @@ src/
   virtualnumberpad.h/cpp   — on-screen numeric keypad
   savefiledialog.h/cpp     — touch-friendly replacement for QFileDialog::getSaveFileName
   numberinputdialog.h/cpp  — touch-friendly replacement for QInputDialog::getInt
-  CMakeLists.txt
+  CMakeLists.txt           — builds both WM and wm_headless
+pc_client/                 — standalone PC GUI client (own CMakeLists.txt, Widgets+Network only)
+  main.cpp, pcclient.h/cpp — talks to wm_headless over TCP; reuses PlotWidget/Stepper from src/
 bin/
-  WM                       — compiled binary
-build/                     — CMake build artifacts
+  WM, wm_headless          — compiled binaries (pc_client builds to bin/ too, from pc_client/build/)
+build/                     — CMake build artifacts (WM + wm_headless)
 docs/                      — user guide, hardware command references, debug notes, screenshot
 tests/                     — standalone Python scripts to test each instrument independently (see tests/README.md)
+run.sh, run_headless.sh    — launchers (GUI / headless), share power_cycle_meter.sh
+bluetooth_setup.sh         — Pi-side Bluetooth PAN + wm_headless autostart (see Remote control below)
 ```
 
 ### Threading model

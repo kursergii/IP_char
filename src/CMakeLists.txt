@@ -8,7 +8,7 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 set(CMAKE_AUTOMOC ON)
 
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets SerialPort)
+find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets SerialPort Network)
 
 # libusb-1.0 — power meter talks USBTMC directly over libusb (not the kernel
 # usbtmc driver, which fails on the PM101A).  On the Pi: apt install libusb-1.0-0-dev
@@ -70,7 +70,36 @@ target_include_directories(WM PRIVATE
     ${LIBUSB_INCLUDE_DIRS}
 )
 
-install(TARGETS WM DESTINATION bin)
+# Headless (no-GUI) build for the Raspberry Pi server side of the
+# Bluetooth remote-control split — see wmcore.h. Deliberately links neither
+# Qt6::Gui nor Qt6::Widgets: it must build and run with no display available.
+add_executable(wm_headless
+    headless_main.cpp
+    wmcore.cpp
+    wmcore.h
+    oscilloscope.cpp
+    oscilloscope.h
+    powermeter.cpp
+    powermeter.h
+    pulser.cpp
+    pulser.h
+)
+
+target_link_libraries(wm_headless PRIVATE
+    Qt6::Core
+    Qt6::Network
+    Qt6::SerialPort
+    ${PS2000_LIB}
+    ${LIBUSB_LIBRARIES}
+)
+
+target_include_directories(wm_headless PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${PS2000_INC}
+    ${LIBUSB_INCLUDE_DIRS}
+)
+
+install(TARGETS WM wm_headless DESTINATION bin)
 install(FILES
     ${CMAKE_SOURCE_DIR}/../README.md
     ${CMAKE_SOURCE_DIR}/../docs/commands_pulser.md

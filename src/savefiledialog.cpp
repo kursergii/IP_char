@@ -10,6 +10,7 @@
 #include <QFile>
 #include <QFont>
 #include <QMessageBox>
+#include <QStorageInfo>
 
 // Default to .csv if the operator didn't type an extension.
 static QString withDefaultExtension(QString name)
@@ -19,15 +20,31 @@ static QString withDefaultExtension(QString name)
     return name;
 }
 
+QString SaveFileDialog::findRemovableDrive()
+{
+    for (const QStorageInfo &info : QStorageInfo::mountedVolumes()) {
+        if (!info.isValid() || !info.isReady() || info.isReadOnly())
+            continue;
+        // udisks/gvfs auto-mount removable media under one of these prefixes
+        // on Linux; that's a much better signal here than QStorageInfo's own
+        // device-type bits, which don't reliably flag USB flash drives.
+        const QString root = info.rootPath();
+        if (root.startsWith("/media/") || root.startsWith("/run/media/"))
+            return root;
+    }
+    return QString();
+}
+
 SaveFileDialog::SaveFileDialog(const QString &title, const QString &defaultName,
-                               QWidget *parent)
+                               const QString &directory, QWidget *parent)
     : QDialog(parent)
+    , m_directory(directory.isEmpty() ? QDir::current().absolutePath() : directory)
 {
     setWindowTitle(title);
 
     auto *outer = new QVBoxLayout(this);
 
-    auto *pathLabel = new QLabel("Saving to: " + QDir::current().absolutePath(), this);
+    auto *pathLabel = new QLabel("Saving to: " + m_directory, this);
     pathLabel->setStyleSheet("color:#666;");
     outer->addWidget(pathLabel);
 
@@ -58,7 +75,7 @@ SaveFileDialog::SaveFileDialog(const QString &title, const QString &defaultName,
         if (name.isEmpty())
             return;
         name = withDefaultExtension(name);
-        if (QFile::exists(QDir::current().filePath(name))) {
+        if (QFile::exists(QDir(m_directory).filePath(name))) {
             auto reply = QMessageBox::question(this, "Overwrite file?",
                 "\"" + name + "\" already exists. Overwrite it?",
                 QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
@@ -74,10 +91,11 @@ SaveFileDialog::SaveFileDialog(const QString &title, const QString &defaultName,
 }
 
 QString SaveFileDialog::getSaveFileName(QWidget *parent, const QString &title,
-                                         const QString &defaultName)
+                                         const QString &defaultName,
+                                         const QString &directory)
 {
-    SaveFileDialog dlg(title, defaultName, parent);
+    SaveFileDialog dlg(title, defaultName, directory, parent);
     if (dlg.exec() != QDialog::Accepted)
         return QString();
-    return QDir::current().filePath(withDefaultExtension(dlg.m_nameEdit->text().trimmed()));
+    return QDir(dlg.m_directory).filePath(withDefaultExtension(dlg.m_nameEdit->text().trimmed()));
 }
